@@ -1,2 +1,11 @@
 /* src/App.css */
 /* Removed old custom styles as we now rely on Tailwind CSS and shadcn/ui */
+
+/* Remove browser focus ring from Recharts SVG elements on click */
+.recharts-wrapper,
+.recharts-wrapper:focus,
+.recharts-wrapper:focus-visible,
+.recharts-wrapper *:focus,
+.recharts-wrapper *:focus-visible {
+  outline: none !important;
+}

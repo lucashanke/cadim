@@ -3,8 +3,9 @@ use tokio::sync::RwLock;
 use reqwest::Client;
 use crate::error::AppError;
 use super::types::{
-    PluggyAuthRequest, PluggyAuthResponse, PluggyAccountsResponse, 
-    PluggyAccount, PluggyConnectTokenResponse, PluggyItemResponse
+    PluggyAuthRequest, PluggyAuthResponse, PluggyAccountsResponse,
+    PluggyAccount, PluggyConnectTokenResponse, PluggyItemResponse,
+    PluggyInvestment, PluggyInvestmentsResponse,
 };
 
 const PLUGGY_BASE_URL: &str = "https://api.pluggy.ai";
@@ -135,6 +136,17 @@ impl PluggyClient {
             .collect();
 
         Ok(checking_accounts)
+    }
+
+    pub async fn get_investments(&self, item_id: &str) -> Result<Vec<PluggyInvestment>, AppError> {
+        let api_key = self.get_api_key().await?;
+        let req = self.http_client
+            .get(format!("{}/investments", PLUGGY_BASE_URL))
+            .query(&[("itemId", item_id)])
+            .header("X-API-KEY", &api_key);
+        let investments: PluggyInvestmentsResponse =
+            self.execute_json_request(req, "Failed to fetch investments").await?;
+        Ok(investments.results)
     }
 
     pub async fn get_item_info(&self, item_id: &str) -> Result<PluggyItemResponse, AppError> {

@@ -1,4 +1,4 @@
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 
 #[derive(Serialize)]
 pub struct HealthResponse {
@@ -21,7 +21,29 @@ pub struct AccountsSummary {
 }
 
 #[derive(Serialize)]
+pub struct InvestmentsSummary {
+    pub total_gross_amount: f64,
+    pub currency_code: String,
+    pub investment_count: usize,
+}
+
+#[derive(Serialize)]
 pub struct ItemInfoResponse {
     pub id: String,
     pub connector_name: String,
+}
+
+#[derive(Serialize)]
+pub struct InvestmentPosition {
+    pub id: String,
+    pub name: String,
+    pub investment_type: String,
+    pub subtype: Option<String>,
+    pub amount: f64,
+    pub currency_code: String,
+    pub date: Option<String>,
+    pub due_date: Option<String>,
+    pub rate: Option<f64>,
+    pub rate_type: Option<String>,
+    pub fixed_annual_rate: Option<f64>,
 }

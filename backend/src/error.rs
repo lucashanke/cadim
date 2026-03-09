@@ -13,7 +13,6 @@ struct ErrorResponse {
 
 #[derive(Debug)]
 pub enum AppError {
-    PluggyAuth(String),
     PluggyClient(String),
     PluggyServer { status: StatusCode, msg: String },
     Internal(String),
@@ -22,7 +21,6 @@ pub enum AppError {
 impl fmt::Display for AppError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::PluggyAuth(msg) => write!(f, "Pluggy auth error: {}", msg),
             Self::PluggyClient(msg) => write!(f, "Pluggy client error: {}", msg),
             Self::PluggyServer { status, msg } => write!(f, "Pluggy server error ({}): {}", status, msg),
             Self::Internal(msg) => write!(f, "Internal error: {}", msg),
@@ -34,7 +32,7 @@ impl fmt::Display for AppError {
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
         let (status, error_message) = match self {
-            AppError::PluggyAuth(_) | AppError::PluggyServer { .. } | AppError::PluggyClient(_) => {
+            AppError::PluggyServer { .. } | AppError::PluggyClient(_) => {
                 // Return 502 for upstream Pluggy errors
                 (StatusCode::BAD_GATEWAY, self.to_string())
             }
