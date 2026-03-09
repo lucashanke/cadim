@@ -1,11 +1,7 @@
-mod error;
-mod pluggy;
-mod routes;
-mod state;
-
+use cadim_backend::pluggy::client::PluggyClient;
+use cadim_backend::routes::build_router;
+use cadim_backend::state::AppState;
 use std::sync::Arc;
-use state::AppState;
-use pluggy::client::PluggyClient;
 
 #[tokio::main]
 async fn main() {
@@ -20,7 +16,7 @@ async fn main() {
         pluggy_client: PluggyClient::new(pluggy_client_id, pluggy_client_secret),
     });
 
-    let app = routes::build_router(state);
+    let app = build_router(state);
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3001").await.unwrap();
     println!("🚀 cadim backend listening on http://localhost:3001");

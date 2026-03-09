@@ -8,6 +8,7 @@ import { AddManualPositionModal } from '@/components/modals/AddManualPositionMod
 import { EditManualPositionModal } from '@/components/modals/EditManualPositionModal'
 import { INVESTMENT_TYPE_LABELS, SUBTYPE_LABELS } from '@/constants/investments'
 import { getStoredItems, storeItems, getManualPositions, saveManualPositions, fetchItemName } from '@/lib/storage'
+import { formatCurrency } from '@/lib/format'
 import type { HealthStatus, AccountsSummary, InvestmentsSummary, InvestmentPosition, ConnectedItem, ManualPosition, Page } from '@/types'
 import './App.css'
 
@@ -247,13 +248,6 @@ function App() {
 
   const allPositions = [...investmentPositions, ...manualAsPositions]
   const manualTotal = manualPositions.reduce((sum, p) => sum + p.amount, 0)
-
-  const formatCurrency = (value: number, currency: string) => {
-    return new Intl.NumberFormat('pt-BR', {
-      style: 'currency',
-      currency,
-    }).format(value)
-  }
 
   return (
     <div className="flex h-screen overflow-hidden">

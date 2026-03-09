@@ -19,18 +19,25 @@ pub struct PluggyClient {
     http_client: Client,
     client_id: String,
     client_secret: String,
+    base_url: String,
     cached_key: RwLock<Option<CachedApiKey>>,
 }
 
 impl PluggyClient {
     pub fn new(client_id: String, client_secret: String) -> Self {
+        Self::new_with_base_url(client_id, client_secret, PLUGGY_BASE_URL.to_string())
+    }
+
+    pub fn new_with_base_url(client_id: String, client_secret: String, base_url: String) -> Self {
         Self {
             http_client: Client::new(),
             client_id,
             client_secret,
+            base_url,
             cached_key: RwLock::new(None),
         }
     }
+
     async fn execute_request(&self, req: reqwest::RequestBuilder, err_ctx: &str) -> Result<reqwest::Response, AppError> {
         let resp = req
             .send()
@@ -52,7 +59,7 @@ impl PluggyClient {
         err_ctx: &str,
     ) -> Result<T, AppError> {
         let resp = self.execute_request(req, err_ctx).await?;
-        
+
         resp.json()
             .await
             .map_err(|e| AppError::Internal(format!("Failed to parse response for {}: {}", err_ctx, e)))
@@ -71,7 +78,7 @@ impl PluggyClient {
 
         // Slow path: acquire write lock and fetch new key
         let mut cache_lk = self.cached_key.write().await;
-        
+
         // Double-check in case another thread already updated the cache while we waited
         if let Some(cache) = &*cache_lk {
             if Instant::now() < cache.expires_at {
@@ -86,11 +93,11 @@ impl PluggyClient {
 
         let req = self
             .http_client
-            .post(format!("{}/auth", PLUGGY_BASE_URL))
+            .post(format!("{}/auth", self.base_url))
             .json(&body);
 
         let auth: PluggyAuthResponse = self.execute_json_request(req, "Failed to call auth").await?;
-        
+
         // Cache the new token. Set expiration to 100 mins (Pluggy tokens are valid for 2 hours)
         *cache_lk = Some(CachedApiKey {
             key: auth.api_key.clone(),
@@ -105,7 +112,7 @@ impl PluggyClient {
 
         let req = self
             .http_client
-            .post(format!("{}/connect_token", PLUGGY_BASE_URL))
+            .post(format!("{}/connect_token", self.base_url))
             .header("X-API-KEY", &api_key)
             .json(&serde_json::json!({}));
 
@@ -118,7 +125,7 @@ impl PluggyClient {
 
         let req = self
             .http_client
-            .get(format!("{}/accounts", PLUGGY_BASE_URL))
+            .get(format!("{}/accounts", self.base_url))
             .query(&[("itemId", item_id), ("type", &"BANK")])
             .header("X-API-KEY", &api_key);
 
@@ -141,7 +148,7 @@ impl PluggyClient {
     pub async fn get_investments(&self, item_id: &str) -> Result<Vec<PluggyInvestment>, AppError> {
         let api_key = self.get_api_key().await?;
         let req = self.http_client
-            .get(format!("{}/investments", PLUGGY_BASE_URL))
+            .get(format!("{}/investments", self.base_url))
             .query(&[("itemId", item_id)])
             .header("X-API-KEY", &api_key);
         let investments: PluggyInvestmentsResponse =
@@ -152,7 +159,7 @@ impl PluggyClient {
     pub async fn get_item_info(&self, item_id: &str) -> Result<PluggyItemResponse, AppError> {
         let api_key = self.get_api_key().await?;
 
-        let url = format!("{}/items/{}", PLUGGY_BASE_URL, item_id);
+        let url = format!("{}/items/{}", self.base_url, item_id);
         let req = self
             .http_client
             .get(&url)
@@ -164,7 +171,7 @@ impl PluggyClient {
     pub async fn delete_item(&self, item_id: &str) -> Result<(), AppError> {
         let api_key = self.get_api_key().await?;
 
-        let url = format!("{}/items/{}", PLUGGY_BASE_URL, item_id);
+        let url = format!("{}/items/{}", self.base_url, item_id);
         let req = self
             .http_client
             .delete(&url)

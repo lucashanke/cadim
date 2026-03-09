@@ -7,6 +7,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { AlertCircle, PlusCircle, BarChart3, Pencil, Trash2, ChevronUp, ChevronDown } from 'lucide-react'
 import { INVESTMENT_TYPE_LABELS, INVESTMENT_TYPE_COLORS, SUBTYPE_LABELS } from '@/constants/investments'
 import { colorBadgeStyle } from '@/lib/color'
+import { formatRate } from '@/lib/investments'
 import type { ConnectedItem, InvestmentPosition } from '@/types'
 
 interface InvestmentsPageProps {
@@ -44,22 +45,6 @@ export function InvestmentsPage({
       setSortCol(col)
       setSortDir('asc')
     }
-  }
-
-  function formatRate(pos: InvestmentPosition): string {
-    const rate = pos.rate || null
-    const rate_type = pos.rate_type
-    const fixed_annual_rate = pos.fixed_annual_rate || null
-    if (!rate_type && fixed_annual_rate == null) return '—'
-    const parts: string[] = []
-    if (rate != null && rate_type && !(rate === 100 && fixed_annual_rate != null)) parts.push(`${rate}%`)
-    if (rate_type) parts.push(rate_type)
-    if (parts.length > 0 && fixed_annual_rate != null) {
-      return parts.join(' ') + ` + ${fixed_annual_rate}% a.a.`
-    }
-    if (parts.length > 0) return parts.join(' ')
-    if (fixed_annual_rate != null) return `${fixed_annual_rate}% a.a.`
-    return '—'
   }
 
   const sortedPositions = useMemo(() => {
