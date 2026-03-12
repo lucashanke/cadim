@@ -44,15 +44,22 @@ pub async fn transactions_list(
     let result = TransactionsResponse {
         results: resp.results
             .into_iter()
-            .map(|t| TransactionItem {
-                id: t.id,
-                description: t.description,
-                amount: t.amount,
-                amount_in_account_currency: t.amount_in_account_currency,
-                currency_code: t.currency_code.unwrap_or_else(|| "BRL".to_string()),
-                date: t.date,
-                category: t.category,
-                transaction_type: t.transaction_type,
+            .map(|t| {
+                let card_last_four = t.credit_card_metadata
+                    .as_ref()
+                    .and_then(|m| m.card_number.as_deref())
+                    .and_then(|n| n.chars().rev().take(4).collect::<String>().chars().rev().collect::<String>().into());
+                TransactionItem {
+                    id: t.id,
+                    description: t.description,
+                    amount: t.amount,
+                    amount_in_account_currency: t.amount_in_account_currency,
+                    currency_code: t.currency_code.unwrap_or_else(|| "BRL".to_string()),
+                    date: t.date,
+                    category: t.category,
+                    transaction_type: t.transaction_type,
+                    card_last_four,
+                }
             })
             .collect(),
         total: resp.total,

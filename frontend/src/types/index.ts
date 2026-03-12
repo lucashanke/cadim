@@ -64,6 +64,7 @@ export interface TransactionItem {
   category: string | null
   amount_in_account_currency: number | null
   transaction_type: string
+  card_last_four: string | null
 }
 
 export interface TransactionsResponse {

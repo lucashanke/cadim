@@ -87,6 +87,12 @@ pub struct PluggyCardAccountsResponse {
 }
 
 #[derive(Deserialize)]
+pub struct PluggyCreditCardMetadata {
+    #[serde(rename = "cardNumber", default)]
+    pub card_number: Option<String>,
+}
+
+#[derive(Deserialize)]
 pub struct PluggyTransaction {
     pub id: String,
     pub description: String,
@@ -101,6 +107,8 @@ pub struct PluggyTransaction {
     pub amount_in_account_currency: Option<f64>,
     #[serde(rename = "type")]
     pub transaction_type: String,
+    #[serde(rename = "creditCardMetadata", default)]
+    pub credit_card_metadata: Option<PluggyCreditCardMetadata>,
 }
 
 #[derive(Deserialize)]

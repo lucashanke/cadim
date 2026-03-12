@@ -55,6 +55,7 @@ pub struct TransactionItem {
     pub category: Option<String>,
     pub amount_in_account_currency: Option<f64>,
     pub transaction_type: String,
+    pub card_last_four: Option<String>,
 }
 
 #[derive(Serialize)]

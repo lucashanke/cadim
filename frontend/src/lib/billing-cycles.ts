@@ -29,9 +29,6 @@ export function groupByCycle(transactions: TransactionItem[]): BillingCycle[] {
   const cycles: BillingCycle[] = []
 
   for (const [key, txns] of map) {
-    if (key === '2025-03') {
-      txns.forEach(t => console.log(t.description, '|', t.category, '|', t.amount_in_account_currency ?? t.amount))
-    }
     const total = txns.reduce((acc, txn) =>
       txn.category === 'Credit card payment' || txn.category === 'Transfers' ? acc
         : acc + (txn.amount_in_account_currency != null ? Math.sign(txn.amount) * txn.amount_in_account_currency : txn.amount), 0)
