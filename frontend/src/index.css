@@ -29,6 +29,13 @@
   --color-card: hsl(var(--card));
   --color-card-foreground: hsl(var(--card-foreground));
 
+  --color-sidebar: hsl(var(--sidebar));
+  --color-sidebar-foreground: hsl(var(--sidebar-foreground));
+  --color-sidebar-accent: hsl(var(--sidebar-accent));
+  --color-sidebar-accent-foreground: hsl(var(--sidebar-accent-foreground));
+  --color-sidebar-border: hsl(var(--sidebar-border));
+  --color-sidebar-ring: hsl(var(--sidebar-ring));
+
   --radius-lg: var(--radius);
   --radius-md: calc(var(--radius) - 2px);
   --radius-sm: calc(var(--radius) - 4px);
@@ -58,6 +65,12 @@
     --input:        222 16% 18%;
     --ring:         262 83% 62%;
     --radius:       0.75rem;
+    --sidebar:              222 18% 13%;
+    --sidebar-foreground:   0   0%  97%;
+    --sidebar-accent:       262 30% 20%;
+    --sidebar-accent-foreground: 262 83% 72%;
+    --sidebar-border:       222 16% 18%;
+    --sidebar-ring:         262 83% 62%;
   }
 
   .dark {
@@ -81,6 +94,12 @@
     --input:        222 16% 18%;
     --ring:         262 83% 62%;
     --radius:       0.75rem;
+    --sidebar:              222 18% 13%;
+    --sidebar-foreground:   0   0%  97%;
+    --sidebar-accent:       262 30% 20%;
+    --sidebar-accent-foreground: 262 83% 72%;
+    --sidebar-border:       222 16% 18%;
+    --sidebar-ring:         262 83% 62%;
   }
 }
 

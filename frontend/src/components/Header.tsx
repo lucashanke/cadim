@@ -1,10 +1,14 @@
 import { Search } from 'lucide-react'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Input } from '@/components/ui/input'
+import { Separator } from '@/components/ui/separator'
+import { SidebarTrigger } from '@/components/ui/sidebar'
 
 export function Header() {
   return (
-    <header className="flex h-14 items-center gap-4 border-b border-border bg-card px-6 shrink-0">
+    <header className="flex h-14 items-center gap-3 border-b border-border bg-card px-4 shrink-0">
+      <SidebarTrigger className="text-muted-foreground hover:text-foreground" />
+      <Separator orientation="vertical" className="h-4" />
       <div className="flex-1">
         <div className="relative w-[280px]">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground/50 pointer-events-none" />

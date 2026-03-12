@@ -1,7 +1,9 @@
 import { useState, useEffect, useCallback } from 'react'
 import { PluggyConnect } from 'react-pluggy-connect'
-import { Sidebar } from '@/components/Sidebar'
+import { AppSidebar } from '@/components/Sidebar'
 import { Header } from '@/components/Header'
+import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar'
+import { TooltipProvider } from '@/components/ui/tooltip'
 import { CreditCardsPage } from '@/components/CreditCardsPage'
 import { DashboardPage } from '@/components/DashboardPage'
 import { InvestmentsPage } from '@/components/InvestmentsPage'
@@ -285,13 +287,14 @@ function App() {
   const manualTotal = manualPositions.reduce((sum, p) => sum + p.amount, 0)
 
   return (
-    <div className="flex h-screen overflow-hidden">
-      <Sidebar currentPage={currentPage} setCurrentPage={setCurrentPage} />
+    <SidebarProvider className="h-screen overflow-hidden">
+      <TooltipProvider>
+      <AppSidebar currentPage={currentPage} setCurrentPage={setCurrentPage} />
 
-      <div className="flex flex-1 flex-col overflow-hidden">
+      <SidebarInset className="overflow-hidden">
         <Header />
 
-        <main className="flex-1 overflow-auto p-8">
+        <div className="flex-1 overflow-auto p-8">
           {currentPage === 'investments' && (
             <InvestmentsPage
               items={items}
@@ -336,8 +339,8 @@ function App() {
               onRetryInvestments={() => fetchAllInvestments(items)}
             />
           )}
-        </main>
-      </div>
+        </div>
+      </SidebarInset>
 
       {showWidget && connectToken && (
         <PluggyConnect
@@ -348,7 +351,8 @@ function App() {
       )}
       <AddManualPositionModal open={showAddModal} onClose={() => setShowAddModal(false)} onSave={handleSaveManual} />
       <EditManualPositionModal position={editingManual} onClose={() => setEditingManual(null)} onSave={handleUpdateManual} />
-    </div>
+      </TooltipProvider>
+    </SidebarProvider>
   )
 }
 
