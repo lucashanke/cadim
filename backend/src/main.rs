@@ -1,4 +1,5 @@
 use cadim_backend::pluggy::client::PluggyClient;
+use tracing_subscriber;
 use cadim_backend::routes::build_router;
 use cadim_backend::state::AppState;
 use std::sync::Arc;
@@ -6,6 +7,12 @@ use std::sync::Arc;
 #[tokio::main]
 async fn main() {
     dotenvy::dotenv().ok();
+    let env_filter = tracing_subscriber::EnvFilter::from_default_env();
+    if std::env::var("APP_ENV").as_deref() == Ok("production") {
+        tracing_subscriber::fmt().json().with_env_filter(env_filter).init();
+    } else {
+        tracing_subscriber::fmt().pretty().with_env_filter(env_filter).init();
+    }
 
     let pluggy_client_id = std::env::var("PLUGGY_CLIENT_ID")
         .expect("PLUGGY_CLIENT_ID must be set in .env");

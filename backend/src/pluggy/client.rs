@@ -6,6 +6,8 @@ use super::types::{
     PluggyAuthRequest, PluggyAuthResponse, PluggyAccountsResponse,
     PluggyAccount, PluggyConnectTokenResponse, PluggyItemResponse,
     PluggyInvestment, PluggyInvestmentsResponse,
+    PluggyCardAccount, PluggyCardAccountsResponse,
+    PluggyTransactionsResponse,
 };
 
 const PLUGGY_BASE_URL: &str = "https://api.pluggy.ai";
@@ -38,11 +40,11 @@ impl PluggyClient {
         }
     }
 
-    async fn execute_request(&self, req: reqwest::RequestBuilder, err_ctx: &str) -> Result<reqwest::Response, AppError> {
+    async fn execute_request(&self, req: reqwest::RequestBuilder, op: &str) -> Result<reqwest::Response, AppError> {
         let resp = req
             .send()
             .await
-            .map_err(|e| AppError::PluggyClient(format!("{}: {}", err_ctx, e)))?;
+            .map_err(|e| AppError::PluggyClient(format!("Failed to {}: {}", op, e)))?;
 
         if !resp.status().is_success() {
             let status = resp.status();
@@ -56,13 +58,20 @@ impl PluggyClient {
     async fn execute_json_request<T: serde::de::DeserializeOwned>(
         &self,
         req: reqwest::RequestBuilder,
-        err_ctx: &str,
+        op: &str,
     ) -> Result<T, AppError> {
-        let resp = self.execute_request(req, err_ctx).await?;
+        let resp = self.execute_request(req, op).await?;
 
-        resp.json()
-            .await
-            .map_err(|e| AppError::Internal(format!("Failed to parse response for {}: {}", err_ctx, e)))
+        let text = resp.text().await
+            .map_err(|e| AppError::Internal(format!("Failed to read response for {}: {}", op, e)))?;
+        let pretty = serde_json::from_str::<serde_json::Value>(&text)
+            .ok()
+            .and_then(|v| serde_json::to_string_pretty(&v).ok())
+            .unwrap_or_else(|| text.clone());
+        tracing::debug!("[pluggy] {}:\n{}", op, pretty);
+
+        serde_json::from_str(&text)
+            .map_err(|e| AppError::Internal(format!("Failed to parse response for {}: {}", op, e)))
     }
 
     async fn get_api_key(&self) -> Result<String, AppError> {
@@ -96,7 +105,7 @@ impl PluggyClient {
             .post(format!("{}/auth", self.base_url))
             .json(&body);
 
-        let auth: PluggyAuthResponse = self.execute_json_request(req, "Failed to call auth").await?;
+        let auth: PluggyAuthResponse = self.execute_json_request(req, "call auth").await?;
 
         // Cache the new token. Set expiration to 100 mins (Pluggy tokens are valid for 2 hours)
         *cache_lk = Some(CachedApiKey {
@@ -116,7 +125,7 @@ impl PluggyClient {
             .header("X-API-KEY", &api_key)
             .json(&serde_json::json!({}));
 
-        let token: PluggyConnectTokenResponse = self.execute_json_request(req, "Failed to create connect token").await?;
+        let token: PluggyConnectTokenResponse = self.execute_json_request(req, "create connect token").await?;
         Ok(token.access_token)
     }
 
@@ -129,7 +138,7 @@ impl PluggyClient {
             .query(&[("itemId", item_id), ("type", &"BANK")])
             .header("X-API-KEY", &api_key);
 
-        let accounts: PluggyAccountsResponse = self.execute_json_request(req, "Failed to fetch accounts").await?;
+        let accounts: PluggyAccountsResponse = self.execute_json_request(req, "fetch accounts").await?;
 
         let checking_accounts = accounts
             .results
@@ -152,8 +161,35 @@ impl PluggyClient {
             .query(&[("itemId", item_id)])
             .header("X-API-KEY", &api_key);
         let investments: PluggyInvestmentsResponse =
-            self.execute_json_request(req, "Failed to fetch investments").await?;
+            self.execute_json_request(req, "fetch investments").await?;
         Ok(investments.results)
+    }
+
+    pub async fn get_credit_card_accounts(&self, item_id: &str) -> Result<Vec<PluggyCardAccount>, AppError> {
+        let api_key = self.get_api_key().await?;
+        let req = self.http_client
+            .get(format!("{}/accounts", self.base_url))
+            .query(&[("itemId", item_id), ("type", "CREDIT")])
+            .header("X-API-KEY", &api_key);
+        let accounts: PluggyCardAccountsResponse =
+            self.execute_json_request(req, "fetch credit card accounts").await?;
+        Ok(accounts.results)
+    }
+
+    pub async fn get_transactions(&self, account_id: &str, page: u32, page_size: u32, from: Option<&str>, to: Option<&str>) -> Result<PluggyTransactionsResponse, AppError> {
+        let api_key = self.get_api_key().await?;
+        let mut query = vec![
+            ("accountId", account_id.to_string()),
+            ("page", page.to_string()),
+            ("pageSize", page_size.to_string()),
+        ];
+        if let Some(from) = from { query.push(("from", from.to_string())); }
+        if let Some(to) = to { query.push(("to", to.to_string())); }
+        let req = self.http_client
+            .get(format!("{}/transactions", self.base_url))
+            .query(&query)
+            .header("X-API-KEY", &api_key);
+        self.execute_json_request(req, "fetch transactions").await
     }
 
     pub async fn get_item_info(&self, item_id: &str) -> Result<PluggyItemResponse, AppError> {
@@ -165,7 +201,7 @@ impl PluggyClient {
             .get(&url)
             .header("X-API-KEY", &api_key);
 
-        self.execute_json_request(req, "Failed to fetch item").await
+        self.execute_json_request(req, "fetch item").await
     }
 
     pub async fn delete_item(&self, item_id: &str) -> Result<(), AppError> {
@@ -177,7 +213,7 @@ impl PluggyClient {
             .delete(&url)
             .header("X-API-KEY", &api_key);
 
-        self.execute_request(req, "Failed to delete item").await?;
+        self.execute_request(req, "delete item").await?;
         Ok(())
     }
 }
