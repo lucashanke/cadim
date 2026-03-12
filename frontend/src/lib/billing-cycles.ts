@@ -44,7 +44,7 @@ export function groupByCycle(transactions: TransactionItem[]): BillingCycle[] {
     cycles.push({ key, label, transactions: sortedTxns, total, currency_code })
   }
 
-  cycles.sort((a, b) => a.key.localeCompare(b.key))
+  cycles.sort((a, b) => b.key.localeCompare(a.key))
 
   return cycles
 }

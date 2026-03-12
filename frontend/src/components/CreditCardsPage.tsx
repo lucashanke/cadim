@@ -780,7 +780,7 @@ export function CreditCardsPage({
                           data-[state=active]:bg-secondary data-[state=active]:shadow-none
                           hover:bg-secondary/50 transition-colors"
                       >
-                        <span className="flex items-center gap-1.5 text-xs font-semibold w-full">
+                        <span className="flex items-center gap-1.5 text-sm font-semibold w-full">
                           {isCurrent && (
                             <span className="relative h-2 w-2 shrink-0">
                               <span className="absolute inset-0 rounded-full bg-primary animate-ping opacity-75" />
