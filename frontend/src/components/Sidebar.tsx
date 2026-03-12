@@ -32,9 +32,13 @@ export function Sidebar({ currentPage, setCurrentPage }: SidebarProps) {
             <LayoutDashboard className="h-4 w-4" />
             Dashboard
           </Button>
-          <Button variant="ghost" className="w-full justify-start gap-2.5 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors">
+          <Button
+            variant="ghost"
+            className={`w-full justify-start gap-2.5 px-3 py-2 rounded-lg text-sm ${currentPage === 'credit-cards' ? 'nav-active' : 'text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors'}`}
+            onClick={() => setCurrentPage('credit-cards')}
+          >
             <CreditCard className="h-4 w-4" />
-            Overview
+            Credit Cards
           </Button>
           <Button
             variant="ghost"

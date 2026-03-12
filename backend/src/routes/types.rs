@@ -34,6 +34,38 @@ pub struct ItemInfoResponse {
 }
 
 #[derive(Serialize)]
+pub struct CreditCardAccount {
+    pub id: String,
+    pub name: String,
+    pub balance: f64,
+    pub currency_code: String,
+    pub credit_limit: Option<f64>,
+    pub available_credit_limit: Option<f64>,
+    pub bill_due_date: Option<String>,
+    pub minimum_payment: Option<f64>,
+}
+
+#[derive(Serialize)]
+pub struct TransactionItem {
+    pub id: String,
+    pub description: String,
+    pub amount: f64,
+    pub currency_code: String,
+    pub date: String,
+    pub category: Option<String>,
+    pub amount_in_account_currency: Option<f64>,
+    pub transaction_type: String,
+}
+
+#[derive(Serialize)]
+pub struct TransactionsResponse {
+    pub results: Vec<TransactionItem>,
+    pub total: usize,
+    pub total_pages: usize,
+    pub page: usize,
+}
+
+#[derive(Serialize)]
 pub struct InvestmentPosition {
     pub id: String,
     pub name: String,

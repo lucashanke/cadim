@@ -1,5 +1,6 @@
 pub mod accounts;
 pub mod connect_token;
+pub mod credit_cards;
 pub mod health;
 pub mod investments;
 pub mod items;
@@ -19,6 +20,8 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .route("/api/accounts/{item_id}/summary", get(accounts::accounts_summary))
         .route("/api/investments/{item_id}/summary", get(investments::investments_summary))
         .route("/api/investments/{item_id}/list", get(investments::investments_list))
+        .route("/api/credit-cards/{item_id}/list", get(credit_cards::credit_cards_list))
+        .route("/api/transactions/{account_id}", get(credit_cards::transactions_list))
         .route("/api/items/{item_id}", get(items::get_item_info))
         .route("/api/items/{item_id}", delete(items::delete_item))
         .layer(cors)

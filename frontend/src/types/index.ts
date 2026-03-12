@@ -42,4 +42,33 @@ export interface ManualPosition {
   due_date: string | null
 }
 
-export type Page = 'dashboard' | 'investments'
+export type Page = 'dashboard' | 'investments' | 'credit-cards'
+
+export interface CreditCardAccount {
+  id: string
+  name: string
+  balance: number
+  currency_code: string
+  credit_limit: number | null
+  available_credit_limit: number | null
+  bill_due_date: string | null
+  minimum_payment: number | null
+}
+
+export interface TransactionItem {
+  id: string
+  description: string
+  amount: number
+  currency_code: string
+  date: string
+  category: string | null
+  amount_in_account_currency: number | null
+  transaction_type: string
+}
+
+export interface TransactionsResponse {
+  results: TransactionItem[]
+  total: number
+  total_pages: number
+  page: number
+}

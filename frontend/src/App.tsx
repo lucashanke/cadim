@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { PluggyConnect } from 'react-pluggy-connect'
 import { Sidebar } from '@/components/Sidebar'
 import { Header } from '@/components/Header'
+import { CreditCardsPage } from '@/components/CreditCardsPage'
 import { DashboardPage } from '@/components/DashboardPage'
 import { InvestmentsPage } from '@/components/InvestmentsPage'
 import { AddManualPositionModal } from '@/components/modals/AddManualPositionModal'
@@ -9,7 +10,7 @@ import { EditManualPositionModal } from '@/components/modals/EditManualPositionM
 import { INVESTMENT_TYPE_LABELS, SUBTYPE_LABELS } from '@/constants/investments'
 import { getStoredItems, storeItems, getManualPositions, saveManualPositions, fetchItemName } from '@/lib/storage'
 import { formatCurrency } from '@/lib/format'
-import type { HealthStatus, AccountsSummary, InvestmentsSummary, InvestmentPosition, ConnectedItem, ManualPosition, Page } from '@/types'
+import type { HealthStatus, AccountsSummary, InvestmentsSummary, InvestmentPosition, ConnectedItem, ManualPosition, Page, CreditCardAccount } from '@/types'
 import './App.css'
 
 function App() {
@@ -28,6 +29,9 @@ function App() {
   const [investmentPositions, setInvestmentPositions] = useState<InvestmentPosition[]>([])
   const [positionsLoading, setPositionsLoading] = useState(false)
   const [positionsError, setPositionsError] = useState<string | null>(null)
+  const [creditCards, setCreditCards] = useState<CreditCardAccount[]>([])
+  const [creditCardsLoading, setCreditCardsLoading] = useState(false)
+  const [creditCardsError, setCreditCardsError] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [manualPositions, setManualPositions] = useState<ManualPosition[]>(getManualPositions)
   const [showAddModal, setShowAddModal] = useState(false)
@@ -148,6 +152,35 @@ function App() {
     }
   }, [items, fetchAllPositions])
 
+  const fetchAllCreditCards = useCallback(async (connectedItems: ConnectedItem[]) => {
+    if (connectedItems.length === 0) return
+    setCreditCardsLoading(true)
+    setCreditCardsError(null)
+    try {
+      const results = await Promise.all(
+        connectedItems.map(async (item) => {
+          const res = await fetch(`/api/credit-cards/${encodeURIComponent(item.id)}/list`)
+          if (!res.ok) {
+            const body = await res.json().catch(() => ({}))
+            throw new Error(body.error || `HTTP ${res.status} for ${item.name}`)
+          }
+          return res.json() as Promise<CreditCardAccount[]>
+        })
+      )
+      setCreditCards(results.flat())
+    } catch (err) {
+      setCreditCardsError(err instanceof Error ? err.message : 'Unknown error')
+    } finally {
+      setCreditCardsLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (items.length > 0) {
+      fetchAllCreditCards(items)
+    }
+  }, [items, fetchAllCreditCards])
+
   // Open the Pluggy Connect widget
   const handleConnectBank = async () => {
     try {
@@ -206,6 +239,8 @@ function App() {
     setInvestmentsError(null)
     setInvestmentPositions([])
     setPositionsError(null)
+    setCreditCards([])
+    setCreditCardsError(null)
     storeItems([])
   }
 
@@ -269,6 +304,16 @@ function App() {
               onAddPosition={() => setShowAddModal(true)}
               onEditPosition={(pos) => setEditingManual(manualPositions.find(m => m.id === pos.id) ?? null)}
               onRemovePosition={handleRemoveManual}
+            />
+          )}
+          {currentPage === 'credit-cards' && (
+            <CreditCardsPage
+              items={items}
+              creditCards={creditCards}
+              loading={creditCardsLoading}
+              error={creditCardsError}
+              onRetry={() => fetchAllCreditCards(items)}
+              formatCurrency={formatCurrency}
             />
           )}
           {currentPage === 'dashboard' && (
