@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { AccountsSummary, ConnectedItem, HealthStatus, InvestmentsSummary } from '@/types'
+import { DebugPanel } from './DebugPanel'
 
 function getGreeting() {
   const h = new Date().getHours()
@@ -262,6 +263,20 @@ export function DashboardPage({
           </CardContent>
         </Card>
       </div>
+
+      <DebugPanel sections={[
+        { label: 'accountsSummary', data: accountsSummary },
+        { label: 'investmentsSummary', data: investmentsSummary },
+        { label: 'manualTotal', data: manualTotal },
+        { label: 'net worth calculation', data: {
+          accounts: accountsSummary?.total_balance ?? 0,
+          investments: investmentsSummary?.total_gross_amount ?? 0,
+          manual: manualTotal,
+          total: (accountsSummary?.total_balance ?? 0) + (investmentsSummary?.total_gross_amount ?? 0) + manualTotal,
+        }},
+        { label: 'health', data: health },
+        { label: 'items', data: items },
+      ]} />
     </>
   )
 }

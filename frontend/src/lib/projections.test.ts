@@ -123,15 +123,15 @@ describe('projectNetWorth', () => {
     const points = projectNetWorth({
       positions: [],
       accountsBalance: 10000,
-      manualTotal: 5000,
+
       cdiAnnual: 13.25,
       ipcaAnnual: 5.0,
       ...defaultSalaryParams,
     })
 
     expect(points).toHaveLength(expectedCount)
-    expect(points[0].total).toBe(15000) // flat positions only
-    expect(points[points.length - 1].total).toBe(15000)
+    expect(points[0].total).toBe(10000) // accounts balance only
+    expect(points[points.length - 1].total).toBe(10000)
   })
 
   it('includes investment growth in totals', () => {
@@ -145,7 +145,7 @@ describe('projectNetWorth', () => {
     const points = projectNetWorth({
       positions: [pos],
       accountsBalance: 0,
-      manualTotal: 0,
+
       cdiAnnual: 13.25,
       ipcaAnnual: 5.0,
       ...defaultSalaryParams,
@@ -159,24 +159,23 @@ describe('projectNetWorth', () => {
     }
   })
 
-  it('includes accounts balance and manual total', () => {
+  it('includes accounts balance in totals', () => {
     const points = projectNetWorth({
       positions: [],
       accountsBalance: 20000,
-      manualTotal: 10000,
       cdiAnnual: 13.25,
       ipcaAnnual: 5.0,
       ...defaultSalaryParams,
     })
 
-    expect(points[0].total).toBe(30000)
+    expect(points[0].total).toBe(20000)
   })
 
   it('has proper month labels', () => {
     const points = projectNetWorth({
       positions: [],
       accountsBalance: 0,
-      manualTotal: 0,
+
       cdiAnnual: 0,
       ipcaAnnual: 0,
       ...defaultSalaryParams,
@@ -190,7 +189,7 @@ describe('projectNetWorth', () => {
     const points = projectNetWorth({
       positions: [],
       accountsBalance: 10000,
-      manualTotal: 0,
+
       cdiAnnual: 13.25,
       ipcaAnnual: 5.0,
       grossSalary: 10000,
@@ -208,7 +207,7 @@ describe('projectNetWorth', () => {
     const points = projectNetWorth({
       positions: [],
       accountsBalance: 0,
-      manualTotal: 0,
+
       cdiAnnual: 13.25,
       ipcaAnnual: 5.0,
       grossSalary: 10000,
@@ -228,7 +227,7 @@ describe('projectNetWorth', () => {
     const points = projectNetWorth({
       positions: [],
       accountsBalance: 10000,
-      manualTotal: 5000,
+
       cdiAnnual: 13.25,
       ipcaAnnual: 5.0,
       grossSalary: 0,
@@ -237,7 +236,7 @@ describe('projectNetWorth', () => {
 
     // All totals should be the same (no growth from salary)
     for (const point of points) {
-      expect(point.total).toBe(15000)
+      expect(point.total).toBe(10000)
     }
   })
 
@@ -249,7 +248,7 @@ describe('projectNetWorth', () => {
     const points = projectNetWorth({
       positions: [],
       accountsBalance: 0,
-      manualTotal: 0,
+
       cdiAnnual: 0,
       ipcaAnnual: 0,
       grossSalary: 10000,
@@ -274,7 +273,7 @@ describe('projectNetWorth', () => {
     const points = projectNetWorth({
       positions: [],
       accountsBalance: 0,
-      manualTotal: 0,
+
       cdiAnnual: 0,
       ipcaAnnual: 0,
       grossSalary: 10000,

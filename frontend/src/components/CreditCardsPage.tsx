@@ -19,6 +19,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import type { ConnectedItem, CreditCardAccount, TransactionItem, BillingCycle, CategoryTotal } from '@/types'
+import { DebugPanel } from './DebugPanel'
 
 const CATEGORY_COLORS: Record<string, { bg: string; text: string; border: string }> = {
   // Food & dining
@@ -1012,6 +1013,13 @@ export function CreditCardsPage({
         </CardContent>
       </Card>
 
+      <DebugPanel sections={[
+        { label: 'creditCards', data: creditCards },
+        { label: 'cycles', data: cycles },
+        { label: 'selectedCycle', data: selectedCycle },
+        { label: 'selectedCard', data: selectedCard },
+        { label: 'items', data: items },
+      ]} />
     </div>
   )
 }

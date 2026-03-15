@@ -12,11 +12,11 @@ import { projectNetWorth } from '@/lib/projections'
 import { calculateMonthlyIncome } from '@/lib/clt-taxes'
 import { getSalaryConfig, saveSalaryConfig } from '@/lib/storage'
 import type { InvestmentPosition, AccountsSummary, MarketRates, ConnectedItem, AverageExpensesResponse, ExpenseMonthBreakdown } from '@/types'
+import { DebugPanel } from './DebugPanel'
 
 interface ProjectionsPageProps {
   positions: InvestmentPosition[]
   accountsSummary: AccountsSummary | null
-  manualTotal: number
   items: ConnectedItem[]
   formatCurrency: (value: number, currency: string) => string
 }
@@ -24,7 +24,6 @@ interface ProjectionsPageProps {
 const stackedChartConfig: ChartConfig = {
   savings: { label: 'Savings', color: 'hsl(215, 30%, 45%)' },
   investments: { label: 'Investments', color: 'hsl(270, 40%, 55%)' },
-  manual: { label: 'Manual Positions', color: 'hsl(38, 85%, 50%)' },
 }
 
 const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
@@ -55,7 +54,7 @@ const CustomTooltip = ({ active, payload, label, formatCurrency }: { active?: bo
   )
 }
 
-export function ProjectionsPage({ positions, accountsSummary, manualTotal, items, formatCurrency }: ProjectionsPageProps) {
+export function ProjectionsPage({ positions, accountsSummary, items, formatCurrency }: ProjectionsPageProps) {
   const [rates, setRates] = useState<MarketRates | null>(null)
   const [ratesLoading, setRatesLoading] = useState(true)
   const [cdiOverride, setCdiOverride] = useState<string>('')
@@ -130,13 +129,12 @@ export function ProjectionsPage({ positions, accountsSummary, manualTotal, items
       projectNetWorth({
         positions,
         accountsBalance,
-        manualTotal,
         cdiAnnual,
         ipcaAnnual,
         grossSalary: grossSalaryNum,
         avgMonthlyExpenses: avgExpensesNum,
       }),
-    [positions, accountsBalance, manualTotal, cdiAnnual, ipcaAnnual, grossSalaryNum, avgExpensesNum],
+    [positions, accountsBalance, cdiAnnual, ipcaAnnual, grossSalaryNum, avgExpensesNum],
   )
 
   const currentTotal = projectionData[0]?.total ?? 0
@@ -475,15 +473,6 @@ export function ProjectionsPage({ positions, accountsSummary, manualTotal, items
                 <ChartTooltip content={<CustomTooltip formatCurrency={formatCurrency} />} />
                 <Area
                   type="monotone"
-                  dataKey="manual"
-                  stackId="1"
-                  stroke="var(--color-manual)"
-                  strokeWidth={0}
-                  fill="var(--color-manual)"
-                  fillOpacity={0.5}
-                />
-                <Area
-                  type="monotone"
                   dataKey="investments"
                   stackId="1"
                   stroke="var(--color-investments)"
@@ -704,6 +693,19 @@ export function ProjectionsPage({ positions, accountsSummary, manualTotal, items
           )}
         </Card>
       )}
+
+      <DebugPanel sections={[
+        { label: 'accountsSummary', data: accountsSummary },
+        { label: 'accountsBalance', data: accountsBalance },
+        { label: 'positions', data: positions },
+        { label: 'currentTotal (net worth)', data: { currentTotal, breakdown: { savings: projectionData[0]?.savings, investments: projectionData[0]?.investments } } },
+        { label: 'projectionData', data: projectionData },
+        { label: 'rates', data: { cdiAnnual, ipcaAnnual, rawRates: rates } },
+        { label: 'income & expenses', data: { grossSalary: grossSalaryNum, avgExpenses: avgExpensesNum, monthlySurplus, regularIncome } },
+        { label: 'growthAttribution', data: growthAttribution },
+        { label: 'monthlyBreakdown', data: monthlyBreakdown },
+        { label: 'items', data: items },
+      ]} />
     </div>
   )
 }

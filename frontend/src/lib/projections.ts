@@ -7,13 +7,11 @@ export interface ProjectionDataPoint {
   total: number
   savings: number
   investments: number
-  manual: number
 }
 
 export interface ProjectionParams {
   positions: InvestmentPosition[]
   accountsBalance: number
-  manualTotal: number
   cdiAnnual: number
   ipcaAnnual: number
   grossSalary: number        // 0 = salary disabled (backward compat)
@@ -77,7 +75,7 @@ export function projectPosition(
 }
 
 export function projectNetWorth(params: ProjectionParams): ProjectionDataPoint[] {
-  const { positions, accountsBalance, manualTotal, cdiAnnual, ipcaAnnual, grossSalary, avgMonthlyExpenses } = params
+  const { positions, accountsBalance, cdiAnnual, ipcaAnnual, grossSalary, avgMonthlyExpenses } = params
 
   const now = new Date()
   const endYear = now.getFullYear()
@@ -102,9 +100,9 @@ export function projectNetWorth(params: ProjectionParams): ProjectionDataPoint[]
       investmentsTotal += projectPosition(pos, monthDate, cdiAnnual, ipcaAnnual)
     }
 
-    const total = savings + manualTotal + investmentsTotal
+    const total = savings + investmentsTotal
 
-    points.push({ month: monthKey, label, total, savings, investments: investmentsTotal, manual: manualTotal })
+    points.push({ month: monthKey, label, total, savings, investments: investmentsTotal })
   }
 
   return points

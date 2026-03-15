@@ -306,7 +306,6 @@ function App() {
             <ProjectionsPage
               positions={allPositions}
               accountsSummary={accountsSummary}
-              manualTotal={manualTotal}
               items={items}
               formatCurrency={formatCurrency}
             />

@@ -7,6 +7,8 @@
 - `cd backend && cargo run` — backend server on :3001
 
 ## Frontend Patterns
+- Data flow: App.tsx owns all state. `allPositions = investmentPositions + manualAsPositions`. When a component needs both, pass `investmentPositions` + `manualTotal` separately OR `allPositions` alone — never both `allPositions` and `manualTotal`
+- Debug panel: `DebugPanel` component on each page shows raw data (collapsible, bottom of page) — remove before shipping
 - shadcn UI components in `frontend/src/components/ui/` — available: alert, avatar, badge, button, card, chart, dialog, dropdown-menu, input, label, separator, sheet, sidebar, skeleton, tabs, tooltip
 - KPI cards: use Dashboard pattern — `Card` with `group`, icon in `h-9 w-9 rounded-xl bg-{color}/10`, `hover:shadow-lg hover:shadow-black/30`, `group-hover` icon color transition
 - Chart tooltips: custom component pattern with color dots, tabular-nums, total row — see CreditCardsPage.tsx

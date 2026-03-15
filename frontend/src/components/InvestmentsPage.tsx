@@ -9,6 +9,7 @@ import { INVESTMENT_TYPE_LABELS, INVESTMENT_TYPE_COLORS, SUBTYPE_LABELS } from '
 import { colorBadgeStyle } from '@/lib/color'
 import { formatRate } from '@/lib/investments'
 import type { ConnectedItem, InvestmentPosition } from '@/types'
+import { DebugPanel } from './DebugPanel'
 
 interface InvestmentsPageProps {
   items: ConnectedItem[]
@@ -407,6 +408,12 @@ export function InvestmentsPage({
           )}
         </CardContent>
       </Card>
+      <DebugPanel sections={[
+        { label: 'positions', data: positions },
+        { label: 'kpiData', data: kpiData },
+        { label: 'manualPositionIds', data: Array.from(manualPositionIds) },
+        { label: 'items', data: items },
+      ]} />
     </div>
   )
 }
