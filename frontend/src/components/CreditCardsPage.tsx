@@ -18,8 +18,7 @@ import {
   Tag, Ticket, TrendingDown, TrendingUp, Utensils, Wrench, Zap,
   type LucideIcon,
 } from 'lucide-react'
-import type { ConnectedItem, CreditCardAccount, TransactionItem, TransactionsResponse } from '@/types'
-import { getCycleKey, groupByCycle, type BillingCycle } from '@/lib/billing-cycles'
+import type { ConnectedItem, CreditCardAccount, TransactionItem, BillingCycle, CategoryTotal } from '@/types'
 
 const CATEGORY_COLORS: Record<string, { bg: string; text: string; border: string }> = {
   // Food & dining
@@ -159,17 +158,26 @@ function getCategoryChartColor(cat: string): string {
   return '#64748b'
 }
 
-function getCycleSummary(cycle: BillingCycle) {
-  const counted = cycle.transactions.filter(
+function computeCategories(transactions: TransactionItem[]): CategoryTotal[] {
+  const counted = transactions.filter(
     t => t.category !== 'Credit card payment' && t.category !== 'Transfers'
   )
   const byCategory = counted.reduce<Record<string, number>>((acc, t) => {
     const cat = t.category ?? 'Unknown'
-    acc[cat] = (acc[cat] ?? 0) + Math.abs(t.amount_in_account_currency ?? t.amount)
+    acc[cat] = (acc[cat] ?? 0) + Math.abs(t.resolved_amount)
     return acc
   }, {})
-  const topCategory = Object.entries(byCategory).sort((a, b) => b[1] - a[1])[0]?.[0] ?? null
-  return { txnCount: counted.length, topCategory }
+  return Object.entries(byCategory)
+    .sort((a, b) => b[1] - a[1])
+    .map(([name, amount]) => ({ name, amount }))
+}
+
+function getCycleSummary(transactions: TransactionItem[]) {
+  const cats = computeCategories(transactions)
+  const counted = transactions.filter(
+    t => t.category !== 'Credit card payment' && t.category !== 'Transfers'
+  )
+  return { txnCount: counted.length, topCategory: cats[0]?.name ?? null }
 }
 
 interface CategoryBreakdown {
@@ -193,10 +201,8 @@ function SpendingHistoryChart({
 
   const categoryTotals: Record<string, number> = {}
   for (const cycle of recentCycles) {
-    for (const txn of cycle.transactions) {
-      if (txn.category === 'Credit card payment' || txn.category === 'Transfers') continue
-      const cat = txn.category ?? 'Other'
-      categoryTotals[cat] = (categoryTotals[cat] ?? 0) + Math.abs(txn.amount_in_account_currency ?? txn.amount)
+    for (const cat of cycle.categories) {
+      categoryTotals[cat.name] = (categoryTotals[cat.name] ?? 0) + cat.amount
     }
   }
   const topCategories = Object.entries(categoryTotals)
@@ -207,11 +213,9 @@ function SpendingHistoryChart({
   const data = recentCycles.map(cycle => {
     const point: Record<string, number | string> = { cycle: cycle.label }
     for (const cat of topCategories) point[cat] = 0
-    for (const txn of cycle.transactions) {
-      if (txn.category === 'Credit card payment' || txn.category === 'Transfers') continue
-      const cat = txn.category ?? 'Other'
-      if (topCategories.includes(cat)) {
-        ;(point[cat] as number) += Math.abs(txn.amount_in_account_currency ?? txn.amount)
+    for (const cat of cycle.categories) {
+      if (topCategories.includes(cat.name)) {
+        ;(point[cat.name] as number) += cat.amount
       }
     }
     return point
@@ -341,8 +345,8 @@ function CycleSummaryBar({
   const filteredTransactions = selectedCard
     ? activeCycle.transactions.filter(t => t.card_last_four === selectedCard)
     : activeCycle.transactions
-  const { txnCount, topCategory } = getCycleSummary({ ...activeCycle, transactions: filteredTransactions })
-  const filteredTotal = filteredTransactions.reduce((sum, t) => sum + (t.amount_in_account_currency ?? t.amount), 0)
+  const { txnCount, topCategory } = getCycleSummary(filteredTransactions)
+  const filteredTotal = filteredTransactions.reduce((sum, t) => sum + t.resolved_amount, 0)
   const displayTotal = selectedCard ? filteredTotal : activeCycle.total
   return (
     <div className="mx-4 mt-4 mb-3 flex items-center gap-6 rounded-xl border border-border bg-secondary/40 px-4 py-3">
@@ -487,34 +491,25 @@ function TransactionTableView({
 }
 
 function CategoryBreakdownView({
-  transactions,
+  categories,
   formatCurrency,
   currencyCode,
 }: {
-  transactions: TransactionItem[]
+  categories: CategoryTotal[]
   formatCurrency: (value: number, currency: string) => string
   currencyCode: string
 }) {
-  const counted = transactions.filter(
-    t => t.category !== 'Credit card payment' && t.category !== 'Transfers'
-  )
-  const byCategory = counted.reduce<Record<string, number>>((acc, t) => {
-    const cat = t.category ?? 'Unknown'
-    acc[cat] = (acc[cat] ?? 0) + Math.abs(t.amount_in_account_currency ?? t.amount)
-    return acc
-  }, {})
-  const totalAmount = Object.values(byCategory).reduce((sum, v) => sum + v, 0)
-  const sorted = Object.entries(byCategory).sort((a, b) => b[1] - a[1])
-  const top8 = sorted.slice(0, 8)
-  const others = sorted.slice(8)
-  const otherTotal = others.reduce((sum, [, v]) => sum + v, 0)
+  const totalAmount = categories.reduce((sum, c) => sum + c.amount, 0)
+  const top8 = categories.slice(0, 8)
+  const others = categories.slice(8)
+  const otherTotal = others.reduce((sum, c) => sum + c.amount, 0)
 
   const breakdowns: CategoryBreakdown[] = [
-    ...top8.map(([category, amount]) => ({
-      category,
-      amount,
-      percentage: totalAmount > 0 ? (amount / totalAmount) * 100 : 0,
-      color: getCategoryChartColor(category),
+    ...top8.map(c => ({
+      category: c.name,
+      amount: c.amount,
+      percentage: totalAmount > 0 ? (c.amount / totalAmount) * 100 : 0,
+      color: getCategoryChartColor(c.name),
     })),
     ...(otherTotal > 0 ? [{
       category: 'Other',
@@ -621,7 +616,7 @@ export function CreditCardsPage({
   onRetry,
   formatCurrency,
 }: CreditCardsPageProps) {
-  const [cycles, setCycles] = useState<ReturnType<typeof groupByCycle>>([])
+  const [cycles, setCycles] = useState<BillingCycle[]>([])
   const [selectedCycle, setSelectedCycle] = useState<string>('')
   const [selectedCard, setSelectedCard] = useState<string | null>(null)
   const [activeView, setActiveView] = useState<'transactions' | 'breakdown'>('transactions')
@@ -651,21 +646,40 @@ export function CreditCardsPage({
       setTransactionsLoading(true)
       setTransactionsError(null)
       try {
-        const pages = await Promise.all(
+        const allCardCycles = await Promise.all(
           creditCards.map(card =>
-            fetch(`/api/transactions/${encodeURIComponent(card.id)}?page=1&page_size=500&from=${windowFrom}&to=${windowTo}`)
+            fetch(`/api/transactions/${encodeURIComponent(card.id)}/cycles?from=${windowFrom}&to=${windowTo}`)
               .then(async res => {
                 if (!res.ok) {
                   const body = await res.json().catch(() => ({}))
                   throw new Error(body.error || `HTTP ${res.status}`)
                 }
-                return res.json() as Promise<TransactionsResponse>
+                return res.json() as Promise<BillingCycle[]>
               })
-              .then(data => data.results)
           )
         )
         if (!cancelled) {
-          setCycles(groupByCycle(pages.flat()))
+          // Merge cycles from all cards by key
+          const merged = new Map<string, BillingCycle>()
+          for (const cardCycles of allCardCycles) {
+            for (const cycle of cardCycles) {
+              const existing = merged.get(cycle.key)
+              if (!existing) {
+                merged.set(cycle.key, { ...cycle, transactions: [...cycle.transactions] })
+              } else {
+                existing.transactions = [...existing.transactions, ...cycle.transactions]
+                  .sort((a, b) => b.date.localeCompare(a.date))
+                existing.total += cycle.total
+                const catMap = new Map<string, number>()
+                for (const cat of existing.categories) catMap.set(cat.name, cat.amount)
+                for (const cat of cycle.categories) catMap.set(cat.name, (catMap.get(cat.name) ?? 0) + cat.amount)
+                existing.categories = Array.from(catMap.entries())
+                  .map(([name, amount]) => ({ name, amount }))
+                  .sort((a, b) => b.amount - a.amount)
+              }
+            }
+          }
+          setCycles(Array.from(merged.values()).sort((a, b) => b.key.localeCompare(a.key)))
         }
       } catch (err) {
         if (!cancelled) {
@@ -680,7 +694,7 @@ export function CreditCardsPage({
     return () => { cancelled = true }
   }, [creditCards, windowFrom, windowTo])
 
-  const currentCycleKey = getCycleKey(new Date().toISOString().split('T')[0])
+  const currentCycleKey = new Date().toISOString().slice(0, 7)
 
   useEffect(() => {
     if (cycles.length === 0) return
@@ -869,9 +883,7 @@ export function CreditCardsPage({
                               .filter(t => t.card_last_four === last4)
                               .reduce((sum, t) => {
                                 if (t.category === 'Credit card payment' || t.category === 'Transfers') return sum
-                                return sum + (t.amount_in_account_currency != null
-                                  ? Math.sign(t.amount) * t.amount_in_account_currency
-                                  : t.amount)
+                                return sum + t.resolved_amount
                               }, 0)
                             return (
                               <button
@@ -928,7 +940,7 @@ export function CreditCardsPage({
                         />
                       ) : (
                         <CategoryBreakdownView
-                          transactions={filteredTransactions}
+                          categories={selectedCard ? computeCategories(filteredTransactions) : activeCycle.categories}
                           formatCurrency={formatCurrency}
                           currencyCode={activeCycle.currency_code}
                         />

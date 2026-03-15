@@ -63,6 +63,7 @@ export interface TransactionItem {
   date: string
   category: string | null
   amount_in_account_currency: number | null
+  resolved_amount: number
   transaction_type: string
   card_last_four: string | null
 }
@@ -72,4 +73,18 @@ export interface TransactionsResponse {
   total: number
   total_pages: number
   page: number
+}
+
+export interface CategoryTotal {
+  name: string
+  amount: number
+}
+
+export interface BillingCycle {
+  key: string
+  label: string
+  total: number
+  currency_code: string
+  transactions: TransactionItem[]
+  categories: CategoryTotal[]
 }

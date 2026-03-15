@@ -54,8 +54,25 @@ pub struct TransactionItem {
     pub date: String,
     pub category: Option<String>,
     pub amount_in_account_currency: Option<f64>,
+    pub resolved_amount: f64,
     pub transaction_type: String,
     pub card_last_four: Option<String>,
+}
+
+#[derive(Serialize)]
+pub struct CategoryTotal {
+    pub name: String,
+    pub amount: f64,
+}
+
+#[derive(Serialize)]
+pub struct BillingCycle {
+    pub key: String,
+    pub label: String,
+    pub total: f64,
+    pub currency_code: String,
+    pub transactions: Vec<TransactionItem>,
+    pub categories: Vec<CategoryTotal>,
 }
 
 #[derive(Serialize)]

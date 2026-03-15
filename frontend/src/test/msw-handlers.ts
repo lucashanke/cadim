@@ -73,26 +73,68 @@ export const sampleTransactions = {
       description: 'Supermercado Extra',
       amount: 250.0,
       amount_in_account_currency: 250.0,
+      resolved_amount: 250.0,
       currency_code: 'BRL',
       date: '2024-01-15',
       category: 'Food',
       transaction_type: 'DEBIT',
+      card_last_four: null,
     },
     {
       id: 'txn-2',
       description: 'Pagamento fatura',
       amount: 500.0,
       amount_in_account_currency: 500.0,
+      resolved_amount: 500.0,
       currency_code: 'BRL',
       date: '2024-01-10',
       category: null,
       transaction_type: 'CREDIT',
+      card_last_four: null,
     },
   ],
   total: 2,
   total_pages: 1,
   page: 1,
 }
+
+export const sampleCycles = [
+  {
+    key: '2024-01',
+    label: 'jan 2024',
+    total: 250.0,
+    currency_code: 'BRL',
+    transactions: [
+      {
+        id: 'txn-1',
+        description: 'Supermercado Extra',
+        amount: 250.0,
+        amount_in_account_currency: 250.0,
+        resolved_amount: 250.0,
+        currency_code: 'BRL',
+        date: '2024-01-15',
+        category: 'Food',
+        transaction_type: 'DEBIT',
+        card_last_four: null,
+      },
+      {
+        id: 'txn-2',
+        description: 'Pagamento fatura',
+        amount: 500.0,
+        amount_in_account_currency: 500.0,
+        resolved_amount: 500.0,
+        currency_code: 'BRL',
+        date: '2024-01-10',
+        category: null,
+        transaction_type: 'CREDIT',
+        card_last_four: null,
+      },
+    ],
+    categories: [
+      { name: 'Food', amount: 250.0 },
+    ],
+  },
+]
 
 export const sampleTransactionsMultiCycle = {
   results: [
@@ -101,30 +143,36 @@ export const sampleTransactionsMultiCycle = {
       description: 'Restaurante',
       amount: 300.0,
       amount_in_account_currency: 300.0,
+      resolved_amount: 300.0,
       currency_code: 'BRL',
       date: '2026-02-15',
       category: 'Food',
       transaction_type: 'DEBIT',
+      card_last_four: null,
     },
     {
       id: 'txn-B',
       description: 'Farmácia',
       amount: 100.0,
       amount_in_account_currency: 100.0,
+      resolved_amount: 100.0,
       currency_code: 'BRL',
       date: '2026-02-05',
       category: 'Health',
       transaction_type: 'DEBIT',
+      card_last_four: null,
     },
     {
       id: 'txn-C',
       description: 'Cashback',
       amount: 50.0,
       amount_in_account_currency: 50.0,
+      resolved_amount: 50.0,
       currency_code: 'BRL',
       date: '2026-01-20',
       category: null,
       transaction_type: 'CREDIT',
+      card_last_four: null,
     },
   ],
   total: 3,
@@ -137,12 +185,20 @@ export const handlers = [
     HttpResponse.json({ status: 'ok', message: 'cadim backend is running' })
   ),
 
+  http.get('/api/investments/summary', () =>
+    HttpResponse.json(sampleInvestmentsSummary)
+  ),
+
   http.get('/api/investments/:id/summary', () =>
     HttpResponse.json(sampleInvestmentsSummary)
   ),
 
   http.get('/api/investments/:id/list', () =>
     HttpResponse.json(samplePositions)
+  ),
+
+  http.get('/api/accounts/summary', () =>
+    HttpResponse.json(sampleAccountsSummary)
   ),
 
   http.get('/api/accounts/:id/summary', () =>
@@ -161,6 +217,10 @@ export const handlers = [
 
   http.get('/api/credit-cards/:id/list', () =>
     HttpResponse.json(sampleCreditCards)
+  ),
+
+  http.get('/api/transactions/:id/cycles', () =>
+    HttpResponse.json(sampleCycles)
   ),
 
   http.get('/api/transactions/:id', () =>

@@ -31,7 +31,7 @@ describe('DashboardPage integration', () => {
   it('shows accounts sync error alert with Retry Sync button', async () => {
     seedItem()
     server.use(
-      http.get('/api/accounts/:id/summary', () =>
+      http.get('/api/accounts/summary', () =>
         HttpResponse.json({ error: 'Pluggy error' }, { status: 502 })
       )
     )
@@ -49,7 +49,7 @@ describe('DashboardPage integration', () => {
     let callCount = 0
 
     server.use(
-      http.get('/api/accounts/:id/summary', () => {
+      http.get('/api/accounts/summary', () => {
         callCount++
         if (callCount === 1) {
           return HttpResponse.json({ error: 'first attempt failed' }, { status: 502 })
@@ -72,7 +72,7 @@ describe('DashboardPage integration', () => {
   it('shows investments sync error alert with Retry Sync button', async () => {
     seedItem()
     server.use(
-      http.get('/api/investments/:id/summary', () =>
+      http.get('/api/investments/summary', () =>
         HttpResponse.json({ error: 'Pluggy error' }, { status: 502 })
       )
     )

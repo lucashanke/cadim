@@ -192,6 +192,22 @@ impl PluggyClient {
         self.execute_json_request(req, "fetch transactions").await
     }
 
+    pub async fn get_all_transactions(
+        &self,
+        account_id: &str,
+        from: Option<&str>,
+        to: Option<&str>,
+    ) -> Result<Vec<super::types::PluggyTransaction>, AppError> {
+        let first = self.get_transactions(account_id, 1, 500, from, to).await?;
+        let total_pages = first.total_pages;
+        let mut all = first.results;
+        for page in 2..=total_pages {
+            let resp = self.get_transactions(account_id, page as u32, 500, from, to).await?;
+            all.extend(resp.results);
+        }
+        Ok(all)
+    }
+
     pub async fn get_item_info(&self, item_id: &str) -> Result<PluggyItemResponse, AppError> {
         let api_key = self.get_api_key().await?;
 

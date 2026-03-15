@@ -62,23 +62,13 @@ function App() {
     setAccountsLoading(true)
     setAccountsError(null)
     try {
-      const results = await Promise.all(
-        connectedItems.map(async (item) => {
-          const res = await fetch(`/api/accounts/${encodeURIComponent(item.id)}/summary`)
-          if (!res.ok) {
-            const body = await res.json().catch(() => ({}))
-            throw new Error(body.error || `HTTP ${res.status} for ${item.name}`)
-          }
-          return res.json() as Promise<AccountsSummary>
-        })
-      )
-
-      const aggregated: AccountsSummary = {
-        total_balance: results.reduce((sum, r) => sum + r.total_balance, 0),
-        currency_code: results[0]?.currency_code ?? 'BRL',
-        account_count: results.reduce((sum, r) => sum + r.account_count, 0),
+      const item_ids = connectedItems.map(i => encodeURIComponent(i.id)).join(',')
+      const res = await fetch(`/api/accounts/summary?item_ids=${item_ids}`)
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        throw new Error(body.error || `HTTP ${res.status}`)
       }
-      setAccountsSummary(aggregated)
+      setAccountsSummary(await res.json() as AccountsSummary)
     } catch (err) {
       setAccountsError(err instanceof Error ? err.message : 'Unknown error')
     } finally {
@@ -97,21 +87,13 @@ function App() {
     setInvestmentsLoading(true)
     setInvestmentsError(null)
     try {
-      const results = await Promise.all(
-        connectedItems.map(async (item) => {
-          const res = await fetch(`/api/investments/${encodeURIComponent(item.id)}/summary`)
-          if (!res.ok) {
-            const body = await res.json().catch(() => ({}))
-            throw new Error(body.error || `HTTP ${res.status} for ${item.name}`)
-          }
-          return res.json() as Promise<InvestmentsSummary>
-        })
-      )
-      setInvestmentsSummary({
-        total_gross_amount: results.reduce((sum, r) => sum + r.total_gross_amount, 0),
-        currency_code: results[0]?.currency_code ?? 'BRL',
-        investment_count: results.reduce((sum, r) => sum + r.investment_count, 0),
-      })
+      const item_ids = connectedItems.map(i => encodeURIComponent(i.id)).join(',')
+      const res = await fetch(`/api/investments/summary?item_ids=${item_ids}`)
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        throw new Error(body.error || `HTTP ${res.status}`)
+      }
+      setInvestmentsSummary(await res.json() as InvestmentsSummary)
     } catch (err) {
       setInvestmentsError(err instanceof Error ? err.message : 'Unknown error')
     } finally {
