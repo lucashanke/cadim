@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Skeleton } from '@/components/ui/skeleton'
-import { AlertCircle, PlusCircle, BarChart3, Pencil, Trash2, ChevronUp, ChevronDown } from 'lucide-react'
+import { AlertCircle, PlusCircle, BarChart3, Pencil, Trash2, ChevronUp, ChevronDown, Wallet, Banknote, TrendingUp } from 'lucide-react'
 import { INVESTMENT_TYPE_LABELS, INVESTMENT_TYPE_COLORS, SUBTYPE_LABELS } from '@/constants/investments'
 import { colorBadgeStyle } from '@/lib/color'
 import { formatRate } from '@/lib/investments'
@@ -68,6 +68,20 @@ export function InvestmentsPage({
     })
   }, [positions, sortCol, sortDir])
 
+  const kpiData = useMemo(() => {
+    const total = positions.reduce((sum, p) => sum + p.amount, 0)
+    const fixedIncome = positions
+      .filter(p => p.investment_type === 'FIXED_INCOME' || p.investment_type === 'TREASURE')
+      .reduce((sum, p) => sum + p.amount, 0)
+    const variableIncome = positions
+      .filter(p => ['EQUITY', 'MUTUAL_FUND', 'ETF'].includes(p.investment_type))
+      .reduce((sum, p) => sum + p.amount, 0)
+    const manual = positions
+      .filter(p => manualPositionIds.has(p.id))
+      .reduce((sum, p) => sum + p.amount, 0)
+    return { total, fixedIncome, variableIncome, manual }
+  }, [positions, manualPositionIds])
+
   const subtypesByType = positions.reduce((acc, p) => {
     if (!acc[p.investment_type]) acc[p.investment_type] = {}
     if (p.subtype) {
@@ -93,10 +107,11 @@ export function InvestmentsPage({
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-start justify-between">
         <div>
           <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-1">Portfolio</p>
           <h1 className="text-2xl font-bold tracking-tight text-foreground">Investments</h1>
+          <p className="text-sm text-muted-foreground mt-1">Track your portfolio allocation and positions across connected institutions</p>
         </div>
         <Button size="sm" onClick={onAddPosition}>
           <PlusCircle className="h-4 w-4 mr-1.5" />
@@ -117,6 +132,59 @@ export function InvestmentsPage({
         </Alert>
       )}
 
+      {positions.length > 0 && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <Card className="overflow-hidden group transition-shadow hover:shadow-lg hover:shadow-black/30">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 pt-2.5 px-4">
+              <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Total Portfolio</CardTitle>
+              <div className="h-9 w-9 rounded-xl bg-primary/10 flex items-center justify-center text-primary group-hover:bg-primary group-hover:text-primary-foreground transition-all duration-300">
+                <Wallet className="h-4 w-4" />
+              </div>
+            </CardHeader>
+            <CardContent className="px-4 pb-3">
+              <div className="text-2xl font-bold tracking-tight">{formatCurrency(kpiData.total, 'BRL')}</div>
+              <p className="text-xs text-muted-foreground mt-1">{positions.length} position{positions.length !== 1 ? 's' : ''}</p>
+            </CardContent>
+          </Card>
+          <Card className="overflow-hidden group transition-shadow hover:shadow-lg hover:shadow-black/30">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 pt-2.5 px-4">
+              <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Fixed Income</CardTitle>
+              <div className="h-9 w-9 rounded-xl bg-violet-500/10 flex items-center justify-center text-violet-500 group-hover:bg-violet-500 group-hover:text-white transition-all duration-300">
+                <Banknote className="h-4 w-4" />
+              </div>
+            </CardHeader>
+            <CardContent className="px-4 pb-3">
+              <div className="text-2xl font-bold tracking-tight">{formatCurrency(kpiData.fixedIncome, 'BRL')}</div>
+              <p className="text-xs text-muted-foreground mt-1">{kpiData.total > 0 ? ((kpiData.fixedIncome / kpiData.total) * 100).toFixed(1) : '0'}% of portfolio</p>
+            </CardContent>
+          </Card>
+          <Card className="overflow-hidden group transition-shadow hover:shadow-lg hover:shadow-black/30">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 pt-2.5 px-4">
+              <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Variable Income</CardTitle>
+              <div className="h-9 w-9 rounded-xl bg-emerald-500/10 flex items-center justify-center text-emerald-500 group-hover:bg-emerald-500 group-hover:text-white transition-all duration-300">
+                <TrendingUp className="h-4 w-4" />
+              </div>
+            </CardHeader>
+            <CardContent className="px-4 pb-3">
+              <div className="text-2xl font-bold tracking-tight">{formatCurrency(kpiData.variableIncome, 'BRL')}</div>
+              <p className="text-xs text-muted-foreground mt-1">{kpiData.total > 0 ? ((kpiData.variableIncome / kpiData.total) * 100).toFixed(1) : '0'}% of portfolio</p>
+            </CardContent>
+          </Card>
+          <Card className="overflow-hidden group transition-shadow hover:shadow-lg hover:shadow-black/30">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 pt-2.5 px-4">
+              <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Manual Positions</CardTitle>
+              <div className="h-9 w-9 rounded-xl bg-accent/10 flex items-center justify-center text-amber-500 group-hover:bg-amber-500 group-hover:text-white transition-all duration-300">
+                <Pencil className="h-4 w-4" />
+              </div>
+            </CardHeader>
+            <CardContent className="px-4 pb-3">
+              <div className="text-2xl font-bold tracking-tight">{formatCurrency(kpiData.manual, 'BRL')}</div>
+              <p className="text-xs text-muted-foreground mt-1">{manualPositionIds.size} manual position{manualPositionIds.size !== 1 ? 's' : ''}</p>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
       <div className="flex flex-wrap gap-6">
       {positions.length > 0 && (() => {
         const pieData = Object.entries(
@@ -131,7 +199,7 @@ export function InvestmentsPage({
         return (
           <Card className="w-fit">
             <CardHeader className="px-5 pt-5 pb-3">
-              <CardTitle className="text-sm font-semibold text-foreground">Allocation</CardTitle>
+              <CardTitle className="text-base text-foreground">Allocation</CardTitle>
               <CardDescription className="text-xs text-muted-foreground">
                 Portfolio breakdown by investment type
               </CardDescription>
@@ -169,24 +237,37 @@ export function InvestmentsPage({
                           const subtypes = Object.entries(subtypesByType[d.name] ?? {})
                             .sort((a, b) => b[1] - a[1])
                           return (
-                            <div className="rounded-xl border border-border/60 bg-card/95 backdrop-blur-sm px-3.5 py-2.5 text-xs shadow-2xl">
-                              <p className="font-semibold text-foreground mb-1">{label}</p>
-                              <p className="text-muted-foreground">{formatCurrency(d.value, 'BRL')}</p>
-                              <p className="text-muted-foreground/70 tabular-nums">{pct}%</p>
+                            <div className="rounded-lg border border-border bg-background px-3 py-2.5 shadow-xl text-xs min-w-[200px]">
+                              <div className="flex items-center gap-2 mb-1.5">
+                                <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ background: INVESTMENT_TYPE_COLORS[d.name] ?? INVESTMENT_TYPE_COLORS.OTHER }} />
+                                <span className="font-semibold text-foreground">{label}</span>
+                              </div>
+                              <div className="flex items-center justify-between gap-4">
+                                <span className="text-muted-foreground">Amount</span>
+                                <span className="font-medium tabular-nums">{formatCurrency(d.value, 'BRL')}</span>
+                              </div>
+                              <div className="flex items-center justify-between gap-4">
+                                <span className="text-muted-foreground">Share</span>
+                                <span className="font-medium tabular-nums">{pct}%</span>
+                              </div>
                               {subtypes.length > 0 && (
-                                <div className="mt-2 pt-2 border-t border-border/40 space-y-1">
+                                <div className="mt-1.5 pt-1.5 border-t border-border space-y-1">
                                   {subtypes.map(([subtype, amount]) => {
                                     const subPct = d.value > 0 ? ((amount / d.value) * 100).toFixed(1) : '0'
                                     const subLabel = SUBTYPE_LABELS[subtype]?.label ?? subtype
                                     return (
                                       <div key={subtype} className="flex items-center justify-between gap-4">
                                         <span className="text-muted-foreground">{subLabel}</span>
-                                        <span className="tabular-nums text-muted-foreground/70">{subPct}%</span>
+                                        <span className="tabular-nums text-muted-foreground">{subPct}%</span>
                                       </div>
                                     )
                                   })}
                                 </div>
                               )}
+                              <div className="mt-1.5 pt-1.5 border-t border-border flex items-center justify-between gap-4">
+                                <span className="font-semibold">Total</span>
+                                <span className="font-semibold tabular-nums">{formatCurrency(total, 'BRL')}</span>
+                              </div>
                             </div>
                           )
                         }}
@@ -223,7 +304,7 @@ export function InvestmentsPage({
 
       <Card>
         <CardHeader className="px-5 pt-5 pb-3">
-          <CardTitle className="text-sm font-semibold text-foreground">Positions</CardTitle>
+          <CardTitle className="text-base text-foreground">Positions</CardTitle>
           <CardDescription className="text-xs text-muted-foreground">
             All investment positions across connected institutions
           </CardDescription>
@@ -242,7 +323,7 @@ export function InvestmentsPage({
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="w-full text-xs">
                 <thead>
                   <tr className="border-b border-border">
                     {(['name', 'type', 'subtype'] as const).map(col => (
@@ -268,7 +349,7 @@ export function InvestmentsPage({
                   {sortedPositions.map((pos, idx) => (
                     <tr
                       key={pos.id}
-                      className={`border-b border-border last:border-0 hover:bg-secondary/50 transition-colors ${idx % 2 === 0 ? '' : 'bg-secondary/20'}`}
+                      className="border-b border-border/40 last:border-0 hover:bg-secondary/50 transition-colors"
                     >
                       <td className="px-5 py-3.5 font-medium text-foreground">
                         <span className="flex items-center gap-2">

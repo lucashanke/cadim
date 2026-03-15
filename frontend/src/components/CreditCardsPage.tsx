@@ -1,7 +1,7 @@
 import * as React from 'react'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { BarChart, Bar, XAxis, YAxis, Cell, AreaChart, Area, CartesianGrid } from 'recharts'
-import { Card, CardContent } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -357,53 +357,6 @@ function SpendingHistoryChart({
   )
 }
 
-function CycleSummaryBar({
-  activeCycle,
-  selectedCard,
-  formatCurrency,
-}: {
-  activeCycle: BillingCycle
-  selectedCard: string | null
-  formatCurrency: (value: number, currency: string) => string
-}) {
-  const filteredTransactions = selectedCard
-    ? activeCycle.transactions.filter(t => t.card_last_four === selectedCard)
-    : activeCycle.transactions
-  const { txnCount, topCategory } = getCycleSummary(filteredTransactions)
-  const filteredTotal = filteredTransactions.reduce((sum, t) => sum + t.resolved_amount, 0)
-  const displayTotal = selectedCard ? filteredTotal : activeCycle.total
-  return (
-    <div className="mx-4 mt-4 mb-3 flex items-center gap-6 rounded-xl border border-border bg-secondary/40 px-4 py-3">
-      <div className="flex-1 min-w-0">
-        <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-0.5">Total Spent</p>
-        <p className="text-2xl font-bold tracking-tight">
-          {displayTotal < 0 ? '-' : ''}{formatCurrency(Math.abs(displayTotal), activeCycle.currency_code)}
-        </p>
-      </div>
-      <div className="h-8 w-px bg-border shrink-0" />
-      <div className="shrink-0">
-        <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-0.5">Transactions</p>
-        <p className="flex items-center gap-1.5 text-sm font-bold">
-          <Receipt className="h-3.5 w-3.5 text-primary" />
-          {txnCount}
-        </p>
-      </div>
-      {topCategory && (
-        <>
-          <div className="h-8 w-px bg-border shrink-0" />
-          <div className="shrink-0">
-            <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-0.5">Top Category</p>
-            <p className="flex items-center gap-1.5 text-sm font-bold">
-              <Tag className="h-3.5 w-3.5 text-primary" />
-              {topCategory}
-            </p>
-          </div>
-        </>
-      )}
-    </div>
-  )
-}
-
 function TransactionTableView({
   transactions,
   searchQuery,
@@ -572,12 +525,30 @@ function CategoryBreakdownView({
               tickLine={false}
             />
             <ChartTooltip
-              content={
-                <ChartTooltipContent
-                  formatter={(value) => [formatCurrency(Number(value), currencyCode), 'Amount']}
-                  hideLabel
-                />
-              }
+              content={({ active, payload }) => {
+                if (!active || !payload?.length) return null
+                const entry = payload[0].payload as CategoryBreakdown
+                return (
+                  <div className="rounded-lg border border-border bg-background px-3 py-2.5 shadow-xl text-xs min-w-[200px]">
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ background: entry.color }} />
+                      <span className="font-semibold text-foreground">{entry.category}</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-4">
+                      <span className="text-muted-foreground">Amount</span>
+                      <span className="font-medium tabular-nums">{formatCurrency(entry.amount, currencyCode)}</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-4">
+                      <span className="text-muted-foreground">Share</span>
+                      <span className="font-medium tabular-nums">{entry.percentage.toFixed(1)}%</span>
+                    </div>
+                    <div className="mt-1.5 pt-1.5 border-t border-border flex items-center justify-between gap-4">
+                      <span className="font-semibold">Total</span>
+                      <span className="font-semibold tabular-nums">{formatCurrency(totalAmount, currencyCode)}</span>
+                    </div>
+                  </div>
+                )
+              }}
             />
             <Bar dataKey="amount" radius={[0, 4, 4, 0]}>
               {breakdowns.map((entry, index) => (
@@ -734,6 +705,22 @@ export function CreditCardsPage({
 
   const maxCycleTotal = cycles.reduce((max, c) => Math.max(max, Math.abs(c.total)), 0)
 
+  const kpiData = useMemo(() => {
+    const activeCycle = cycles.find(c => c.key === selectedCycle)
+    if (!activeCycle) return null
+    const { txnCount, topCategory } = getCycleSummary(activeCycle.transactions)
+    const topCat = activeCycle.categories[0]
+    const distinctCards = new Set(activeCycle.transactions.map(t => t.card_last_four).filter(Boolean))
+    return {
+      totalSpent: Math.abs(activeCycle.total),
+      currencyCode: activeCycle.currency_code,
+      txnCount,
+      topCategoryName: topCategory,
+      topCategoryAmount: topCat?.amount ?? 0,
+      cardsActive: distinctCards.size,
+    }
+  }, [cycles, selectedCycle])
+
   const CARD_GRADIENTS = [
     'from-indigo-950 via-indigo-900 to-violet-900',
     'from-slate-900 via-zinc-800 to-slate-900',
@@ -743,10 +730,11 @@ export function CreditCardsPage({
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-start justify-between">
         <div>
           <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-1">Cards</p>
           <h1 className="text-2xl font-bold tracking-tight text-foreground">Credit Cards</h1>
+          <p className="text-sm text-muted-foreground mt-1">Monitor spending patterns and billing cycles across your credit cards</p>
         </div>
         <div className="flex items-center gap-3">
           {!transactionsLoading && cycles.length >= 2 && (
@@ -774,6 +762,59 @@ export function CreditCardsPage({
             </Button>
           </AlertDescription>
         </Alert>
+      )}
+
+      {kpiData && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <Card className="overflow-hidden group transition-shadow hover:shadow-lg hover:shadow-black/30">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 pt-2.5 px-4">
+              <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Total Spent</CardTitle>
+              <div className="h-9 w-9 rounded-xl bg-primary/10 flex items-center justify-center text-primary group-hover:bg-primary group-hover:text-primary-foreground transition-all duration-300">
+                <CreditCard className="h-4 w-4" />
+              </div>
+            </CardHeader>
+            <CardContent className="px-4 pb-3">
+              <div className="text-2xl font-bold tracking-tight">{formatCurrency(kpiData.totalSpent, kpiData.currencyCode)}</div>
+              <p className="text-xs text-muted-foreground mt-1">Active billing cycle</p>
+            </CardContent>
+          </Card>
+          <Card className="overflow-hidden group transition-shadow hover:shadow-lg hover:shadow-black/30">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 pt-2.5 px-4">
+              <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Transactions</CardTitle>
+              <div className="h-9 w-9 rounded-xl bg-violet-500/10 flex items-center justify-center text-violet-500 group-hover:bg-violet-500 group-hover:text-white transition-all duration-300">
+                <Receipt className="h-4 w-4" />
+              </div>
+            </CardHeader>
+            <CardContent className="px-4 pb-3">
+              <div className="text-2xl font-bold tracking-tight">{kpiData.txnCount}</div>
+              <p className="text-xs text-muted-foreground mt-1">This cycle</p>
+            </CardContent>
+          </Card>
+          <Card className="overflow-hidden group transition-shadow hover:shadow-lg hover:shadow-black/30">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 pt-2.5 px-4">
+              <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Top Category</CardTitle>
+              <div className="h-9 w-9 rounded-xl bg-emerald-500/10 flex items-center justify-center text-emerald-500 group-hover:bg-emerald-500 group-hover:text-white transition-all duration-300">
+                <Tag className="h-4 w-4" />
+              </div>
+            </CardHeader>
+            <CardContent className="px-4 pb-3">
+              <div className="text-2xl font-bold tracking-tight truncate">{kpiData.topCategoryName ?? '—'}</div>
+              <p className="text-xs text-muted-foreground mt-1">{kpiData.topCategoryAmount > 0 ? formatCurrency(kpiData.topCategoryAmount, kpiData.currencyCode) : 'No spending'}</p>
+            </CardContent>
+          </Card>
+          <Card className="overflow-hidden group transition-shadow hover:shadow-lg hover:shadow-black/30">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 pt-2.5 px-4">
+              <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Cards Active</CardTitle>
+              <div className="h-9 w-9 rounded-xl bg-accent/10 flex items-center justify-center text-amber-500 group-hover:bg-amber-500 group-hover:text-white transition-all duration-300">
+                <CreditCard className="h-4 w-4" />
+              </div>
+            </CardHeader>
+            <CardContent className="px-4 pb-3">
+              <div className="text-2xl font-bold tracking-tight">{kpiData.cardsActive}</div>
+              <p className="text-xs text-muted-foreground mt-1">Distinct card{kpiData.cardsActive !== 1 ? 's' : ''} used</p>
+            </CardContent>
+          </Card>
+        </div>
       )}
 
       <Card>
@@ -853,13 +894,6 @@ export function CreditCardsPage({
 
                   return (
                     <TabsContent key={cycle.key} value={cycle.key} className="mt-0 flex flex-col">
-
-                      {/* Summary bar */}
-                      <CycleSummaryBar
-                        activeCycle={activeCycle}
-                        selectedCard={selectedCard}
-                        formatCurrency={formatCurrency}
-                      />
 
                       {/* Card filter */}
                       {cards.length > 1 && (
