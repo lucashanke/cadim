@@ -7,6 +7,7 @@ import { TooltipProvider } from '@/components/ui/tooltip'
 import { CreditCardsPage } from '@/components/CreditCardsPage'
 import { DashboardPage } from '@/components/DashboardPage'
 import { InvestmentsPage } from '@/components/InvestmentsPage'
+import { ProjectionsPage } from '@/components/ProjectionsPage'
 import { AddManualPositionModal } from '@/components/modals/AddManualPositionModal'
 import { EditManualPositionModal } from '@/components/modals/EditManualPositionModal'
 import { INVESTMENT_TYPE_LABELS, SUBTYPE_LABELS } from '@/constants/investments'
@@ -298,6 +299,15 @@ function App() {
               loading={creditCardsLoading}
               error={creditCardsError}
               onRetry={() => fetchAllCreditCards(items)}
+              formatCurrency={formatCurrency}
+            />
+          )}
+          {currentPage === 'projections' && (
+            <ProjectionsPage
+              positions={allPositions}
+              accountsSummary={accountsSummary}
+              manualTotal={manualTotal}
+              items={items}
               formatCurrency={formatCurrency}
             />
           )}

@@ -4,6 +4,7 @@ pub mod credit_cards;
 pub mod health;
 pub mod investments;
 pub mod items;
+pub mod rates;
 pub mod types;
 
 use std::sync::Arc;
@@ -26,6 +27,8 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .route("/api/transactions/{account_id}", get(credit_cards::transactions_list))
         .route("/api/transactions/{account_id}/cycles", get(credit_cards::transactions_cycles))
         .route("/api/items/{item_id}", get(items::get_item_info))
+        .route("/api/rates", get(rates::get_rates))
+        .route("/api/accounts/expenses", get(accounts::average_expenses_multi))
         .route("/api/items/{item_id}", delete(items::delete_item))
         .layer(cors)
         .with_state(state)

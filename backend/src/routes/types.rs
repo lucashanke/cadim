@@ -97,3 +97,32 @@ pub struct InvestmentPosition {
     pub rate_type: Option<String>,
     pub fixed_annual_rate: Option<f64>,
 }
+
+#[derive(Serialize)]
+pub struct MarketRates {
+    pub cdi_annual: f64,
+    pub ipca_annual: f64,
+}
+
+#[derive(Serialize)]
+pub struct ExpenseTransaction {
+    pub description: String,
+    pub amount: f64,
+    pub date: String,
+    pub category: Option<String>,
+}
+
+#[derive(Serialize)]
+pub struct ExpenseMonthBreakdown {
+    pub month: String,
+    pub total: f64,
+    pub transactions: Vec<ExpenseTransaction>,
+}
+
+#[derive(Serialize)]
+pub struct AverageExpensesResponse {
+    pub average_monthly_expenses: f64,
+    pub currency_code: String,
+    pub months_analyzed: usize,
+    pub monthly_breakdown: Vec<ExpenseMonthBreakdown>,
+}

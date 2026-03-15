@@ -1,5 +1,6 @@
-import { Activity, LayoutDashboard, TrendingUp, CreditCard, Building } from 'lucide-react'
+import { Activity, LayoutDashboard, TrendingUp, CreditCard, Building, LineChart } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
+import { Logo } from '@/components/Logo'
 import {
   Sidebar,
   SidebarContent,
@@ -25,9 +26,7 @@ export function AppSidebar({ currentPage, setCurrentPage }: AppSidebarProps) {
     <Sidebar collapsible="icon">
       <SidebarHeader className="h-14 justify-center border-b border-sidebar-border">
         <div className="flex items-center gap-2 px-1">
-          <div className="h-7 w-7 rounded-lg bg-gradient-to-br from-primary to-accent flex items-center justify-center glow-primary shrink-0">
-            <span className="text-primary-foreground font-bold font-sans text-sm">c</span>
-          </div>
+          <Logo size={28} className="shrink-0" />
           <h2 className="text-xl font-bold tracking-tight text-foreground group-data-[collapsible=icon]:hidden">cadim</h2>
           <Badge variant="outline" className="text-[9px] font-bold uppercase tracking-wide border-accent/40 text-accent py-0 px-1.5 group-data-[collapsible=icon]:hidden">
             Beta
@@ -55,6 +54,12 @@ export function AppSidebar({ currentPage, setCurrentPage }: AppSidebarProps) {
                 <SidebarMenuButton isActive={currentPage === 'investments'} tooltip="Investments" onClick={() => setCurrentPage('investments')}>
                   <TrendingUp />
                   <span>Investments</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton isActive={currentPage === 'projections'} tooltip="Projections" onClick={() => setCurrentPage('projections')}>
+                  <LineChart />
+                  <span>Projections</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>

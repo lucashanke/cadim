@@ -189,6 +189,20 @@ interface CategoryBreakdown {
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
+// Curated palette with maximum hue separation for dark backgrounds
+const CHART_PALETTE = [
+  '#7eb3d4', // dusty blue
+  '#74bfa8', // sage teal
+  '#a88fc4', // muted violet
+  '#8ab87a', // muted green
+  '#c48a7a', // dusty rose
+  '#c4a86a', // muted amber
+  '#8a9ec4', // slate blue
+  '#c48aaa', // muted mauve
+  '#6ab0a0', // muted emerald
+  '#94a3b8', // cool slate
+]
+
 function SpendingHistoryChart({
   cycles,
   formatCurrency,
@@ -196,7 +210,8 @@ function SpendingHistoryChart({
   cycles: BillingCycle[]
   formatCurrency: (value: number, currency: string) => string
 }) {
-  const recentCycles = cycles.slice(-6)
+  // Oldest first → newest last so the time axis flows left → right
+  const recentCycles = [...cycles.slice(-6)].reverse()
   if (recentCycles.length < 2) return null
 
   const categoryTotals: Record<string, number> = {}
@@ -205,10 +220,13 @@ function SpendingHistoryChart({
       categoryTotals[cat.name] = (categoryTotals[cat.name] ?? 0) + cat.amount
     }
   }
-  const topCategories = Object.entries(categoryTotals)
+  const topCategoryEntries = Object.entries(categoryTotals)
     .sort((a, b) => b[1] - a[1])
     .slice(0, 10)
-    .map(([cat]) => cat)
+  const topCategories = topCategoryEntries.map(([cat]) => cat)
+
+  // Assign palette colors by rank so visually distinct colors go to top spenders
+  const paletteColor = (index: number) => CHART_PALETTE[index % CHART_PALETTE.length]
 
   const data = recentCycles.map(cycle => {
     const point: Record<string, number | string> = { cycle: cycle.label }
@@ -222,28 +240,35 @@ function SpendingHistoryChart({
   })
 
   const chartConfig: ChartConfig = Object.fromEntries(
-    topCategories.map(cat => [cat, { label: cat, color: getCategoryChartColor(cat) }])
+    topCategories.map((cat, i) => [cat, { label: cat, color: paletteColor(i) }])
   )
   const currencyCode = recentCycles[0].currency_code
   const [selectedCat, setSelectedCat] = useState<string | null>(null)
 
-  // Custom tooltip: clean layout, skip zero-value entries
   const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?: { name: string; value: number; color: string }[]; label?: string }) => {
     if (!active || !payload?.length) return null
     const entries = [...payload].reverse().filter(e => e.value > 0)
+    const total = entries.reduce((sum, e) => sum + e.value, 0)
     return (
-      <div className="rounded-lg border border-border bg-background px-3 py-2.5 shadow-xl text-xs min-w-[180px]">
+      <div className="rounded-lg border border-border bg-background px-3 py-2.5 shadow-xl text-xs min-w-[200px]">
         <p className="font-semibold text-foreground mb-2">{label}</p>
         <div className="space-y-1.5">
           {entries.map(e => (
             <div key={e.name} className="flex items-center justify-between gap-4">
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-1.5 min-w-0">
                 <div className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: e.color }} />
-                <span className="text-muted-foreground">{e.name}</span>
+                <span className="text-muted-foreground truncate">{e.name}</span>
               </div>
-              <span className="font-mono font-medium tabular-nums text-foreground">{formatCurrency(e.value, currencyCode)}</span>
+              <div className="flex items-center gap-2 shrink-0">
+                <span className="text-muted-foreground/60 tabular-nums">{total > 0 ? Math.round((e.value / total) * 100) : 0}%</span>
+                <span className="font-mono font-medium tabular-nums text-foreground">{formatCurrency(e.value, currencyCode)}</span>
+              </div>
             </div>
           ))}
+        </div>
+        <div className="mt-2 pt-2 border-t border-border flex justify-between">
+          <span className="text-muted-foreground">Total</span>
+          <span className="font-mono font-semibold tabular-nums text-foreground">{formatCurrency(total, currencyCode)}</span>
         </div>
       </div>
     )
@@ -261,17 +286,9 @@ function SpendingHistoryChart({
         <DialogHeader>
           <DialogTitle>Spending by Category — Past 6 Months</DialogTitle>
         </DialogHeader>
-        <ChartContainer config={chartConfig} className="h-[420px] w-full aspect-auto mt-2">
+        <ChartContainer config={chartConfig} className="h-[400px] w-full aspect-auto mt-2">
           <AreaChart data={data} margin={{ top: 8, right: 16, bottom: 0, left: 16 }}>
-            <defs>
-              {topCategories.map(cat => (
-                <linearGradient key={cat} id={`grad-${cat.replace(/\s+/g, '-')}`} x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor={getCategoryChartColor(cat)} stopOpacity={0.5} />
-                  <stop offset="100%" stopColor={getCategoryChartColor(cat)} stopOpacity={0.1} />
-                </linearGradient>
-              ))}
-            </defs>
-            <CartesianGrid vertical={false} stroke="hsl(var(--border))" strokeOpacity={0.4} />
+            <CartesianGrid vertical={false} stroke="hsl(var(--border))" strokeOpacity={0.3} />
             <XAxis
               dataKey="cycle"
               tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }}
@@ -287,43 +304,50 @@ function SpendingHistoryChart({
               width={90}
             />
             <ChartTooltip content={<CustomTooltip />} />
-            {topCategories.map(cat => {
+            {topCategories.map((cat, i) => {
               const dimmed = selectedCat !== null && selectedCat !== cat
               return (
                 <Area
                   key={cat}
-                  type="monotone"
+                  type="linear"
                   dataKey={cat}
                   stackId={selectedCat === null ? '1' : cat}
-                  stroke={getCategoryChartColor(cat)}
-                  strokeWidth={dimmed ? 0 : 1.5}
-                  strokeOpacity={dimmed ? 0 : 1}
-                  fillOpacity={dimmed ? 0 : 1}
-                  fill={`url(#grad-${cat.replace(/\s+/g, '-')})`}
+                  stroke="hsl(var(--background))"
+                  strokeWidth={1}
+                  strokeOpacity={dimmed ? 0 : 0.6}
+                  fill={paletteColor(i)}
+                  fillOpacity={dimmed ? 0 : 0.6}
                   dot={false}
-                  activeDot={dimmed ? false : { r: 4, strokeWidth: 0 }}
-                  style={{ transition: 'opacity 0.2s' }}
+                  activeDot={dimmed ? false : { r: 5, strokeWidth: 2, stroke: 'hsl(var(--background))', fill: paletteColor(i) }}
+                  style={{ transition: 'opacity 0.15s' }}
                 />
               )
             })}
           </AreaChart>
         </ChartContainer>
 
-        <div className="grid grid-cols-4 gap-x-6 gap-y-2 mt-1">
-          {topCategories.map(cat => {
+        <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 mt-2 sm:grid-cols-3 lg:grid-cols-5">
+          {topCategoryEntries.map(([cat, total], i) => {
             const isSelected = selectedCat === cat
             const isDimmed = selectedCat !== null && !isSelected
             return (
               <button
                 key={cat}
                 onClick={() => setSelectedCat(isSelected ? null : cat)}
-                className={`flex items-center gap-2 min-w-0 text-left transition-opacity ${isDimmed ? 'opacity-30' : 'opacity-100'}`}
+                className={`flex items-center gap-2 min-w-0 text-left py-1 px-1.5 rounded transition-opacity ${isDimmed ? 'opacity-25' : 'opacity-100'}`}
               >
                 <div
                   className="h-2.5 w-2.5 rounded-sm shrink-0 transition-all"
-                  style={{ backgroundColor: getCategoryChartColor(cat), outline: isSelected ? `2px solid ${getCategoryChartColor(cat)}` : 'none', outlineOffset: '2px' }}
+                  style={{
+                    backgroundColor: paletteColor(i),
+                    outline: isSelected ? `2px solid ${paletteColor(i)}` : 'none',
+                    outlineOffset: '2px',
+                  }}
                 />
-                <span className={`text-xs truncate transition-colors ${isSelected ? 'text-foreground font-medium' : 'text-muted-foreground'}`}>{cat}</span>
+                <div className="min-w-0 flex flex-col">
+                  <span className={`text-xs truncate transition-colors leading-tight ${isSelected ? 'text-foreground font-medium' : 'text-muted-foreground'}`}>{cat}</span>
+                  <span className="text-[10px] font-mono tabular-nums text-muted-foreground/60 leading-tight">{formatCurrency(total, currencyCode)}</span>
+                </div>
               </button>
             )
           })}

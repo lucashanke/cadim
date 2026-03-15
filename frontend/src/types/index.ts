@@ -42,7 +42,32 @@ export interface ManualPosition {
   due_date: string | null
 }
 
-export type Page = 'dashboard' | 'investments' | 'credit-cards'
+export interface ExpenseTransaction {
+  description: string
+  amount: number
+  date: string
+  category: string | null
+}
+
+export interface ExpenseMonthBreakdown {
+  month: string
+  total: number
+  transactions: ExpenseTransaction[]
+}
+
+export interface AverageExpensesResponse {
+  average_monthly_expenses: number
+  currency_code: string
+  months_analyzed: number
+  monthly_breakdown: ExpenseMonthBreakdown[]
+}
+
+export type Page = 'dashboard' | 'investments' | 'credit-cards' | 'projections'
+
+export interface MarketRates {
+  cdi_annual: number
+  ipca_annual: number
+}
 
 export interface CreditCardAccount {
   id: string

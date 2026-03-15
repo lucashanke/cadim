@@ -16,6 +16,7 @@ pub struct PluggyAuthResponse {
 
 #[derive(Deserialize)]
 pub struct PluggyAccount {
+    pub id: String,
     #[serde(default)]
     pub balance: f64,
     #[serde(default)]
