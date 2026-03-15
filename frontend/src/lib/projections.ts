@@ -38,19 +38,18 @@ export function projectPosition(
 ): number {
   const { amount, investment_type, rate, rate_type, fixed_annual_rate, due_date } = position
 
-  // Past maturity → freeze
-  if (due_date) {
-    const maturity = new Date(due_date)
-    if (monthDate > maturity) return amount
-  }
-
-  // Flat types and positions with no rate info
+  // Flat types don't grow
   if (FLAT_TYPES.has(investment_type)) return amount
-  if (!rate_type && !fixed_annual_rate) return amount
+
+  // Past maturity or no rate info → assume 100% CDI
+  const pastMaturity = due_date && monthDate > new Date(due_date)
+  const noRateInfo = !rate_type && !fixed_annual_rate
 
   let effectiveAnnual: number
 
-  if (rate_type === 'CDI') {
+  if (pastMaturity || noRateInfo) {
+    effectiveAnnual = cdiAnnual
+  } else if (rate_type === 'CDI') {
     // CDI% of CDI rate + fixed spread
     const cdiPortion = cdiAnnual * ((rate ?? 100) / 100)
     effectiveAnnual = cdiPortion + (fixed_annual_rate ?? 0)
@@ -90,9 +89,12 @@ export function projectNetWorth(params: ProjectionParams): ProjectionDataPoint[]
     const monthKey = `${endYear}-${String(m + 1).padStart(2, '0')}`
     const label = monthDate.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
 
-    if (grossSalary > 0 && m > now.getMonth()) {
-      const income = calculateMonthlyIncome(grossSalary, m)
-      savings = (savings + income.netIncome - avgMonthlyExpenses) * (1 + cdiMonthly)
+    if (m > now.getMonth()) {
+      if (grossSalary > 0) {
+        const income = calculateMonthlyIncome(grossSalary, m)
+        savings += income.netIncome - avgMonthlyExpenses
+      }
+      savings *= (1 + cdiMonthly)
     }
 
     let investmentsTotal = 0

@@ -85,7 +85,7 @@ describe('projectPosition', () => {
     expect(result).toBe(3000)
   })
 
-  it('freezes matured positions', () => {
+  it('projects matured positions at 100% CDI', () => {
     const pastDate = new Date()
     pastDate.setMonth(pastDate.getMonth() - 1)
     const pos = makePosition({
@@ -95,7 +95,9 @@ describe('projectPosition', () => {
       due_date: pastDate.toISOString().split('T')[0],
     })
     const result = projectPosition(pos, futureDate(6), 13.25, 5.0)
-    expect(result).toBe(10000)
+    // Past maturity → defaults to 100% CDI (13.25% annual)
+    expect(result).toBeGreaterThan(10000)
+    expect(result).toBeLessThan(11000)
   })
 
   it('returns amount for current month (0 months ahead)', () => {
@@ -108,10 +110,12 @@ describe('projectPosition', () => {
     expect(result).toBe(10000)
   })
 
-  it('returns amount for positions without rate info', () => {
+  it('projects positions without rate info at 100% CDI', () => {
     const pos = makePosition({})
     const result = projectPosition(pos, futureDate(6), 13.25, 5.0)
-    expect(result).toBe(10000)
+    // No rate info → defaults to 100% CDI (13.25% annual)
+    expect(result).toBeGreaterThan(10000)
+    expect(result).toBeLessThan(11000)
   })
 })
 
@@ -131,7 +135,10 @@ describe('projectNetWorth', () => {
 
     expect(points).toHaveLength(expectedCount)
     expect(points[0].total).toBe(10000) // accounts balance only
-    expect(points[points.length - 1].total).toBe(10000)
+    // Last point should show CDI growth on savings
+    if (points.length > 1) {
+      expect(points[points.length - 1].total).toBeGreaterThan(10000)
+    }
   })
 
   it('includes investment growth in totals', () => {
@@ -223,7 +230,7 @@ describe('projectNetWorth', () => {
     }
   })
 
-  it('zero salary = backward-compatible flat behavior', () => {
+  it('zero salary: savings still compound at CDI', () => {
     const points = projectNetWorth({
       positions: [],
       accountsBalance: 10000,
@@ -234,9 +241,11 @@ describe('projectNetWorth', () => {
       avgMonthlyExpenses: 0,
     })
 
-    // All totals should be the same (no growth from salary)
-    for (const point of points) {
-      expect(point.total).toBe(10000)
+    // First month is current value
+    expect(points[0].total).toBe(10000)
+    // Subsequent months should grow at CDI
+    if (points.length > 1) {
+      expect(points[1].total).toBeGreaterThan(10000)
     }
   })
 
