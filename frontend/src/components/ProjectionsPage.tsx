@@ -186,7 +186,7 @@ export function ProjectionsPage({ positions, accountsSummary, items, formatCurre
       {/* 1. Page Header with Settings Sheet trigger */}
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Net Worth Projection</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">Net Worth Projection</h1>
           <p className="text-sm text-muted-foreground mt-1">
             Projected growth through end of year with savings, investments, and income breakdown
           </p>
@@ -355,7 +355,7 @@ export function ProjectionsPage({ positions, accountsSummary, items, formatCurre
             </div>
           </CardHeader>
           <CardContent className="px-4 pb-3">
-            <div className="text-2xl font-bold tracking-tight">
+            <div className="text-2xl font-bold font-heading tracking-tight">
               {formatCurrency(currentTotal, 'BRL')}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
@@ -375,7 +375,7 @@ export function ProjectionsPage({ positions, accountsSummary, items, formatCurre
             </div>
           </CardHeader>
           <CardContent className="px-4 pb-3">
-            <div className="text-2xl font-bold tracking-tight">
+            <div className="text-2xl font-bold font-heading tracking-tight">
               {formatCurrency(endTotal, 'BRL')}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
@@ -395,7 +395,7 @@ export function ProjectionsPage({ positions, accountsSummary, items, formatCurre
             </div>
           </CardHeader>
           <CardContent className="px-4 pb-3">
-            <div className="text-2xl font-bold tracking-tight">
+            <div className="text-2xl font-bold font-heading tracking-tight">
               {growthPct.toFixed(2)}%
             </div>
             <p className="text-xs text-muted-foreground mt-1">
@@ -416,7 +416,7 @@ export function ProjectionsPage({ positions, accountsSummary, items, formatCurre
               </div>
             </CardHeader>
             <CardContent className="px-4 pb-3">
-              <div className={`text-2xl font-bold tracking-tight ${monthlySurplus >= 0 ? '' : 'text-red-400'}`}>
+              <div className={`text-2xl font-bold font-heading tracking-tight ${monthlySurplus >= 0 ? '' : 'text-red-400'}`}>
                 {formatCurrency(monthlySurplus, 'BRL')}
               </div>
               <p className="text-xs text-muted-foreground mt-1">

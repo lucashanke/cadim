@@ -117,7 +117,7 @@ export function DashboardPage({
             </div>
           </CardHeader>
           <CardContent className="px-6 pb-5">
-            <div className="text-3xl font-bold tracking-tight text-gradient">
+            <div className="text-3xl font-bold font-heading tracking-tight text-gradient">
               {accountsLoading || investmentsLoading ? (
                 <Skeleton className="h-9 w-48 bg-secondary" />
               ) : (
@@ -150,7 +150,7 @@ export function DashboardPage({
               </div>
             </CardHeader>
             <CardContent className="px-4 pb-3">
-              <div className="text-2xl font-bold tracking-tight text-gradient">
+              <div className="text-2xl font-bold font-heading tracking-tight text-gradient">
                 {accountsLoading ? (
                   <Skeleton className="h-8 w-32 bg-secondary" />
                 ) : accountsSummary ? (
@@ -174,7 +174,7 @@ export function DashboardPage({
               </div>
             </CardHeader>
             <CardContent className="px-4 pb-3">
-              <div className="text-2xl font-bold tracking-tight text-foreground">
+              <div className="text-2xl font-bold font-heading tracking-tight text-foreground">
                 {accountsLoading ? (
                   <Skeleton className="h-8 w-12 bg-secondary" />
                 ) : (
@@ -195,7 +195,7 @@ export function DashboardPage({
               </div>
             </CardHeader>
             <CardContent className="px-4 pb-3">
-              <div className="text-2xl font-bold tracking-tight text-gradient">
+              <div className="text-2xl font-bold font-heading tracking-tight text-gradient">
                 {investmentsLoading ? (
                   <Skeleton className="h-8 w-32 bg-secondary" />
                 ) : (investmentsSummary || manualTotal > 0) ? (

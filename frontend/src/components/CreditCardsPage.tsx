@@ -445,7 +445,7 @@ function TransactionTableView({
                       {txn.category ? (() => {
                         const Icon = getCategoryIcon(txn.category)
                         return (
-                          <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-sm font-medium bg-secondary text-foreground/60">
+                          <span className="inline-flex items-center gap-1.5 rounded-full border border-border px-2.5 py-0.5 text-xs font-semibold tracking-wide bg-secondary text-muted-foreground">
                             {Icon && <Icon className="h-3.5 w-3.5 shrink-0" />}
                             {txn.category}
                           </span>
@@ -774,7 +774,7 @@ export function CreditCardsPage({
               </div>
             </CardHeader>
             <CardContent className="px-4 pb-3">
-              <div className="text-2xl font-bold tracking-tight">{formatCurrency(kpiData.totalSpent, kpiData.currencyCode)}</div>
+              <div className="text-2xl font-bold font-heading tracking-tight">{formatCurrency(kpiData.totalSpent, kpiData.currencyCode)}</div>
               <p className="text-xs text-muted-foreground mt-1">Active billing cycle</p>
             </CardContent>
           </Card>
@@ -786,7 +786,7 @@ export function CreditCardsPage({
               </div>
             </CardHeader>
             <CardContent className="px-4 pb-3">
-              <div className="text-2xl font-bold tracking-tight">{kpiData.txnCount}</div>
+              <div className="text-2xl font-bold font-heading tracking-tight">{kpiData.txnCount}</div>
               <p className="text-xs text-muted-foreground mt-1">This cycle</p>
             </CardContent>
           </Card>
@@ -798,7 +798,7 @@ export function CreditCardsPage({
               </div>
             </CardHeader>
             <CardContent className="px-4 pb-3">
-              <div className="text-2xl font-bold tracking-tight truncate">{kpiData.topCategoryName ?? '—'}</div>
+              <div className="text-2xl font-bold font-heading tracking-tight truncate">{kpiData.topCategoryName ?? '—'}</div>
               <p className="text-xs text-muted-foreground mt-1">{kpiData.topCategoryAmount > 0 ? formatCurrency(kpiData.topCategoryAmount, kpiData.currencyCode) : 'No spending'}</p>
             </CardContent>
           </Card>
@@ -810,7 +810,7 @@ export function CreditCardsPage({
               </div>
             </CardHeader>
             <CardContent className="px-4 pb-3">
-              <div className="text-2xl font-bold tracking-tight">{kpiData.cardsActive}</div>
+              <div className="text-2xl font-bold font-heading tracking-tight">{kpiData.cardsActive}</div>
               <p className="text-xs text-muted-foreground mt-1">Distinct card{kpiData.cardsActive !== 1 ? 's' : ''} used</p>
             </CardContent>
           </Card>

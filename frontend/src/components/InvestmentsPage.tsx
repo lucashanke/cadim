@@ -142,7 +142,7 @@ export function InvestmentsPage({
               </div>
             </CardHeader>
             <CardContent className="px-4 pb-3">
-              <div className="text-2xl font-bold tracking-tight">{formatCurrency(kpiData.total, 'BRL')}</div>
+              <div className="text-2xl font-bold font-heading tracking-tight">{formatCurrency(kpiData.total, 'BRL')}</div>
               <p className="text-xs text-muted-foreground mt-1">{positions.length} position{positions.length !== 1 ? 's' : ''}</p>
             </CardContent>
           </Card>
@@ -154,7 +154,7 @@ export function InvestmentsPage({
               </div>
             </CardHeader>
             <CardContent className="px-4 pb-3">
-              <div className="text-2xl font-bold tracking-tight">{formatCurrency(kpiData.fixedIncome, 'BRL')}</div>
+              <div className="text-2xl font-bold font-heading tracking-tight">{formatCurrency(kpiData.fixedIncome, 'BRL')}</div>
               <p className="text-xs text-muted-foreground mt-1">{kpiData.total > 0 ? ((kpiData.fixedIncome / kpiData.total) * 100).toFixed(1) : '0'}% of portfolio</p>
             </CardContent>
           </Card>
@@ -166,7 +166,7 @@ export function InvestmentsPage({
               </div>
             </CardHeader>
             <CardContent className="px-4 pb-3">
-              <div className="text-2xl font-bold tracking-tight">{formatCurrency(kpiData.variableIncome, 'BRL')}</div>
+              <div className="text-2xl font-bold font-heading tracking-tight">{formatCurrency(kpiData.variableIncome, 'BRL')}</div>
               <p className="text-xs text-muted-foreground mt-1">{kpiData.total > 0 ? ((kpiData.variableIncome / kpiData.total) * 100).toFixed(1) : '0'}% of portfolio</p>
             </CardContent>
           </Card>
@@ -178,7 +178,7 @@ export function InvestmentsPage({
               </div>
             </CardHeader>
             <CardContent className="px-4 pb-3">
-              <div className="text-2xl font-bold tracking-tight">{formatCurrency(kpiData.manual, 'BRL')}</div>
+              <div className="text-2xl font-bold font-heading tracking-tight">{formatCurrency(kpiData.manual, 'BRL')}</div>
               <p className="text-xs text-muted-foreground mt-1">{manualPositionIds.size} manual position{manualPositionIds.size !== 1 ? 's' : ''}</p>
             </CardContent>
           </Card>
@@ -323,7 +323,7 @@ export function InvestmentsPage({
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-xs">
+              <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border">
                     {(['name', 'type', 'subtype'] as const).map(col => (
@@ -365,7 +365,7 @@ export function InvestmentsPage({
                           const label = INVESTMENT_TYPE_LABELS[pos.investment_type]?.label ?? pos.investment_type
                           return (
                             <span style={color ? colorBadgeStyle(color) : undefined}
-                              className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[10px] font-semibold tracking-wide ${!color ? 'bg-secondary text-muted-foreground border-border' : ''}`}>
+                              className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold tracking-wide ${!color ? 'bg-secondary text-muted-foreground border-border' : ''}`}>
                               {label}
                             </span>
                           )
@@ -373,7 +373,7 @@ export function InvestmentsPage({
                       </td>
                       <td className="px-5 py-3.5">
                         {pos.subtype ? (
-                          <span className="inline-flex items-center rounded-full border border-border px-2.5 py-0.5 text-[10px] font-semibold tracking-wide text-muted-foreground">
+                          <span className="inline-flex items-center rounded-full border border-border px-2.5 py-0.5 text-xs font-semibold tracking-wide text-muted-foreground">
                             {SUBTYPE_LABELS[pos.subtype]?.label ?? pos.subtype}
                           </span>
                         ) : '—'}
