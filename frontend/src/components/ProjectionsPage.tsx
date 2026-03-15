@@ -11,7 +11,7 @@ import { TrendingUp, Percent, Wallet, PiggyBank, ChevronDown, ChevronRight, Slid
 import { projectNetWorth } from '@/lib/projections'
 import { calculateMonthlyIncome } from '@/lib/clt-taxes'
 import { getSalaryConfig, saveSalaryConfig } from '@/lib/storage'
-import type { InvestmentPosition, AccountsSummary, MarketRates, ConnectedItem, AverageExpensesResponse, ExpenseMonthBreakdown } from '@/types'
+import type { InvestmentPosition, AccountsSummary, MarketRates, ConnectedItem, AverageExpensesResponse } from '@/types'
 import { DebugPanel } from './DebugPanel'
 
 interface ProjectionsPageProps {
@@ -66,9 +66,6 @@ export function ProjectionsPage({ positions, accountsSummary, items, formatCurre
   const [avgExpenses, setAvgExpenses] = useState<string>('')
   const [avgExpensesLoading, setAvgExpensesLoading] = useState(false)
   const [monthsAnalyzed, setMonthsAnalyzed] = useState<number>(0)
-  const [monthlyBreakdown, setMonthlyBreakdown] = useState<ExpenseMonthBreakdown[]>([])
-  const [showBreakdown, setShowBreakdown] = useState(false)
-  const [expandedMonths, setExpandedMonths] = useState<Set<string>>(new Set())
   const [showIncomeSchedule, setShowIncomeSchedule] = useState(false)
 
   useEffect(() => {
@@ -101,7 +98,6 @@ export function ProjectionsPage({ positions, accountsSummary, items, formatCurre
         const data: AverageExpensesResponse = await res.json()
         setAvgExpenses(data.average_monthly_expenses.toFixed(2))
         setMonthsAnalyzed(data.months_analyzed)
-        setMonthlyBreakdown(data.monthly_breakdown)
       } catch {
         // Leave editable, user can input manually
       } finally {
@@ -168,21 +164,6 @@ export function ProjectionsPage({ positions, accountsSummary, items, formatCurre
     }
     return rows
   }, [grossSalaryNum])
-
-  // Category summary from expense breakdown
-  const categorySummary = useMemo(() => {
-    if (monthlyBreakdown.length === 0) return []
-    const map = new Map<string, number>()
-    for (const month of monthlyBreakdown) {
-      for (const tx of month.transactions) {
-        const cat = tx.category || 'Uncategorized'
-        map.set(cat, (map.get(cat) ?? 0) + tx.amount)
-      }
-    }
-    return Array.from(map.entries())
-      .map(([name, amount]) => ({ name, amount }))
-      .sort((a, b) => b.amount - a.amount)
-  }, [monthlyBreakdown])
 
   // Growth attribution: contributions vs compound interest
   const growthAttribution = useMemo(() => {
@@ -596,104 +577,6 @@ export function ProjectionsPage({ positions, accountsSummary, items, formatCurre
         </Card>
       )}
 
-      {/* 7. Expense Breakdown (collapsible) */}
-      {monthlyBreakdown.length > 0 && (
-        <Card>
-          <CardHeader className="pb-3">
-            <button
-              className="flex items-center gap-2 text-base font-semibold w-full text-left"
-              onClick={() => setShowBreakdown(!showBreakdown)}
-            >
-              {showBreakdown ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-              Expense Breakdown
-              <span className="text-xs font-normal text-muted-foreground ml-1">
-                ({monthlyBreakdown.reduce((s, m) => s + m.transactions.length, 0)} transactions)
-              </span>
-            </button>
-          </CardHeader>
-          {showBreakdown && (
-            <CardContent className="space-y-4">
-              {/* Category summary */}
-              {categorySummary.length > 0 && (
-                <div className="space-y-2 pb-3 border-b border-border">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">By Category</p>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
-                    {categorySummary.slice(0, 10).map((cat) => {
-                      const totalExpenses = categorySummary.reduce((s, c) => s + c.amount, 0)
-                      const pct = totalExpenses > 0 ? (cat.amount / totalExpenses) * 100 : 0
-                      return (
-                        <div key={cat.name} className="flex items-center gap-2 text-xs">
-                          <div className="flex-1 min-w-0 flex items-center justify-between gap-2">
-                            <span className="truncate text-foreground">{cat.name}</span>
-                            <span className="font-semibold tabular-nums shrink-0">{formatCurrency(cat.amount, 'BRL')}</span>
-                          </div>
-                          <span className="text-muted-foreground tabular-nums w-10 text-right shrink-0">{pct.toFixed(0)}%</span>
-                        </div>
-                      )
-                    })}
-                    {categorySummary.length > 10 && (
-                      <p className="text-xs text-muted-foreground col-span-full">
-                        + {categorySummary.length - 10} more categories
-                      </p>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Per-month transactions */}
-              {monthlyBreakdown.map((month) => {
-                const isExpanded = expandedMonths.has(month.month)
-                const monthLabel = new Date(month.month + '-15').toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
-                return (
-                  <div key={month.month}>
-                    <button
-                      className="flex items-center justify-between w-full text-left py-1.5 hover:bg-muted/50 rounded px-2 -mx-2"
-                      onClick={() => {
-                        setExpandedMonths(prev => {
-                          const next = new Set(prev)
-                          if (next.has(month.month)) next.delete(month.month)
-                          else next.add(month.month)
-                          return next
-                        })
-                      }}
-                    >
-                      <span className="flex items-center gap-2 text-sm font-medium">
-                        {isExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
-                        {monthLabel}
-                        <span className="text-xs text-muted-foreground font-normal">
-                          ({month.transactions.length} transactions)
-                        </span>
-                      </span>
-                      <span className="text-sm font-semibold tabular-nums">
-                        {formatCurrency(month.total, 'BRL')}
-                      </span>
-                    </button>
-                    {isExpanded && (
-                      <div className="ml-6 mt-1 space-y-0.5">
-                        {month.transactions.map((tx, i) => (
-                          <div key={i} className="flex items-center justify-between text-xs py-1 border-b border-border/40 last:border-0">
-                            <div className="flex-1 min-w-0">
-                              <span className="text-foreground truncate block">{tx.description}</span>
-                              <span className="text-muted-foreground">
-                                {tx.date.slice(0, 10)}
-                                {tx.category && <> &middot; {tx.category}</>}
-                              </span>
-                            </div>
-                            <span className="text-foreground font-medium tabular-nums ml-4 shrink-0">
-                              {formatCurrency(tx.amount, 'BRL')}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )
-              })}
-            </CardContent>
-          )}
-        </Card>
-      )}
-
       <DebugPanel sections={[
         { label: 'accountsSummary', data: accountsSummary },
         { label: 'accountsBalance', data: accountsBalance },
@@ -703,7 +586,6 @@ export function ProjectionsPage({ positions, accountsSummary, items, formatCurre
         { label: 'rates', data: { cdiAnnual, ipcaAnnual, rawRates: rates } },
         { label: 'income & expenses', data: { grossSalary: grossSalaryNum, avgExpenses: avgExpensesNum, monthlySurplus, regularIncome } },
         { label: 'growthAttribution', data: growthAttribution },
-        { label: 'monthlyBreakdown', data: monthlyBreakdown },
         { label: 'items', data: items },
       ]} />
     </div>

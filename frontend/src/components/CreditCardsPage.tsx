@@ -733,7 +733,6 @@ export function CreditCardsPage({
     <div className="space-y-6">
       <div className="flex items-start justify-between">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-1">Cards</p>
           <h1 className="text-2xl font-bold tracking-tight text-foreground">Credit Cards</h1>
           <p className="text-sm text-muted-foreground mt-1">Monitor spending patterns and billing cycles across your credit cards</p>
         </div>
