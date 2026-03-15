@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts'
+import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -38,6 +38,7 @@ export function InvestmentsPage({
 }: InvestmentsPageProps) {
   const [sortCol, setSortCol] = useState<string | null>(null)
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
+  const [pieHover, setPieHover] = useState<{ name: string; x: number; y: number } | null>(null)
 
   function handleSort(col: string) {
     if (sortCol === col) {
@@ -206,7 +207,13 @@ export function InvestmentsPage({
             </CardHeader>
             <CardContent className="px-5 pb-6">
               <div className="flex flex-col sm:flex-row items-center gap-8">
-                <div className="w-[200px] h-[200px] shrink-0">
+                <div
+                  className="w-[200px] h-[200px] shrink-0 relative"
+                  onMouseMove={(e) => {
+                    if (pieHover) setPieHover(prev => prev ? { ...prev, x: e.clientX, y: e.clientY } : null)
+                  }}
+                  onMouseLeave={() => setPieHover(null)}
+                >
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart tabIndex={-1}>
                       <Pie
@@ -219,6 +226,8 @@ export function InvestmentsPage({
                         cornerRadius={5}
                         strokeWidth={0}
                         dataKey="value"
+                        onMouseOver={(_, idx) => setPieHover(prev => ({ name: pieData[idx].name, x: prev?.x ?? 0, y: prev?.y ?? 0 }))}
+                        onMouseOut={() => setPieHover(null)}
                       >
                         {pieData.map((entry) => (
                           <Cell
@@ -228,52 +237,49 @@ export function InvestmentsPage({
                           />
                         ))}
                       </Pie>
-                      <Tooltip
-                        content={({ active, payload }) => {
-                          if (!active || !payload?.length) return null
-                          const d = payload[0].payload
-                          const pct = total > 0 ? ((d.value / total) * 100).toFixed(1) : '0'
-                          const label = INVESTMENT_TYPE_LABELS[d.name]?.label ?? d.name
-                          const subtypes = Object.entries(subtypesByType[d.name] ?? {})
-                            .sort((a, b) => b[1] - a[1])
-                          return (
-                            <div className="rounded-lg border border-border bg-background px-3 py-2.5 shadow-xl text-xs min-w-[200px]">
-                              <div className="flex items-center gap-2 mb-1.5">
-                                <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ background: INVESTMENT_TYPE_COLORS[d.name] ?? INVESTMENT_TYPE_COLORS.OTHER }} />
-                                <span className="font-semibold text-foreground">{label}</span>
-                              </div>
-                              <div className="flex items-center justify-between gap-4">
-                                <span className="text-muted-foreground">Amount</span>
-                                <span className="font-medium tabular-nums">{formatCurrency(d.value, 'BRL')}</span>
-                              </div>
-                              <div className="flex items-center justify-between gap-4">
-                                <span className="text-muted-foreground">Share</span>
-                                <span className="font-medium tabular-nums">{pct}%</span>
-                              </div>
-                              {subtypes.length > 0 && (
-                                <div className="mt-1.5 pt-1.5 border-t border-border space-y-1">
-                                  {subtypes.map(([subtype, amount]) => {
-                                    const subPct = d.value > 0 ? ((amount / d.value) * 100).toFixed(1) : '0'
-                                    const subLabel = SUBTYPE_LABELS[subtype]?.label ?? subtype
-                                    return (
-                                      <div key={subtype} className="flex items-center justify-between gap-4">
-                                        <span className="text-muted-foreground">{subLabel}</span>
-                                        <span className="tabular-nums text-muted-foreground">{subPct}%</span>
-                                      </div>
-                                    )
-                                  })}
-                                </div>
-                              )}
-                              <div className="mt-1.5 pt-1.5 border-t border-border flex items-center justify-between gap-4">
-                                <span className="font-semibold">Total</span>
-                                <span className="font-semibold tabular-nums">{formatCurrency(total, 'BRL')}</span>
-                              </div>
-                            </div>
-                          )
-                        }}
-                      />
                     </PieChart>
                   </ResponsiveContainer>
+                  {pieHover && pieHover.x > 0 && (() => {
+                    const d = pieData.find(p => p.name === pieHover.name)
+                    if (!d) return null
+                    const pct = total > 0 ? ((d.value / total) * 100).toFixed(1) : '0'
+                    const label = INVESTMENT_TYPE_LABELS[d.name]?.label ?? d.name
+                    const subtypes = Object.entries(subtypesByType[d.name] ?? {})
+                      .sort((a, b) => b[1] - a[1])
+                    return (
+                      <div
+                        className="fixed z-50 pointer-events-none rounded-lg border border-border bg-background px-3 py-2.5 shadow-xl text-xs min-w-[180px]"
+                        style={{ left: pieHover.x + 12, top: pieHover.y - 12 }}
+                      >
+                        <div className="flex items-center gap-2 mb-1.5">
+                          <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ background: INVESTMENT_TYPE_COLORS[d.name] ?? INVESTMENT_TYPE_COLORS.OTHER }} />
+                          <span className="font-semibold text-foreground">{label}</span>
+                        </div>
+                        <div className="flex items-center justify-between gap-4">
+                          <span className="text-muted-foreground">Amount</span>
+                          <span className="font-medium tabular-nums">{formatCurrency(d.value, 'BRL')}</span>
+                        </div>
+                        <div className="flex items-center justify-between gap-4">
+                          <span className="text-muted-foreground">Share</span>
+                          <span className="font-medium tabular-nums">{pct}%</span>
+                        </div>
+                        {subtypes.length > 0 && (
+                          <div className="mt-1.5 pt-1.5 border-t border-border space-y-1">
+                            {subtypes.map(([subtype, amount]) => {
+                              const subPct = d.value > 0 ? ((amount / d.value) * 100).toFixed(1) : '0'
+                              const subLabel = SUBTYPE_LABELS[subtype]?.label ?? subtype
+                              return (
+                                <div key={subtype} className="flex items-center justify-between gap-4">
+                                  <span className="text-muted-foreground">{subLabel}</span>
+                                  <span className="tabular-nums text-muted-foreground">{subPct}%</span>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })()}
                 </div>
                 <div className="flex flex-col gap-3 flex-1 w-full">
                   {pieData.map((d) => {

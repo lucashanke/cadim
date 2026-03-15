@@ -602,6 +602,8 @@ interface CreditCardsPageProps {
   error: string | null
   onRetry: () => void
   formatCurrency: (value: number, currency: string) => string
+  billingCycles: BillingCycle[]
+  billingCyclesLoading: boolean
 }
 
 export function CreditCardsPage({
@@ -611,84 +613,14 @@ export function CreditCardsPage({
   error,
   onRetry,
   formatCurrency,
+  billingCycles: cycles,
+  billingCyclesLoading: transactionsLoading,
 }: CreditCardsPageProps) {
-  const [cycles, setCycles] = useState<BillingCycle[]>([])
   const [selectedCycle, setSelectedCycle] = useState<string>('')
   const [selectedCard, setSelectedCard] = useState<string | null>(null)
   const [activeView, setActiveView] = useState<'transactions' | 'breakdown'>('transactions')
   const [searchQuery, setSearchQuery] = useState('')
-  const [transactionsLoading, setTransactionsLoading] = useState(false)
-  const [transactionsError, setTransactionsError] = useState<string | null>(null)
-
-  const windowFrom = (() => {
-    const d = new Date()
-    d.setMonth(d.getMonth() - 5)
-    d.setDate(1)
-    return d.toISOString().split('T')[0]
-  })()
-
-  const windowTo = (() => {
-    const d = new Date()
-    d.setMonth(d.getMonth() + 1)
-    d.setDate(0) // last day of current month
-    return d.toISOString().split('T')[0]
-  })()
-
-  useEffect(() => {
-    if (creditCards.length === 0) return
-    let cancelled = false
-
-    async function fetchAll() {
-      setTransactionsLoading(true)
-      setTransactionsError(null)
-      try {
-        const allCardCycles = await Promise.all(
-          creditCards.map(card =>
-            fetch(`/api/transactions/${encodeURIComponent(card.id)}/cycles?from=${windowFrom}&to=${windowTo}`)
-              .then(async res => {
-                if (!res.ok) {
-                  const body = await res.json().catch(() => ({}))
-                  throw new Error(body.error || `HTTP ${res.status}`)
-                }
-                return res.json() as Promise<BillingCycle[]>
-              })
-          )
-        )
-        if (!cancelled) {
-          // Merge cycles from all cards by key
-          const merged = new Map<string, BillingCycle>()
-          for (const cardCycles of allCardCycles) {
-            for (const cycle of cardCycles) {
-              const existing = merged.get(cycle.key)
-              if (!existing) {
-                merged.set(cycle.key, { ...cycle, transactions: [...cycle.transactions] })
-              } else {
-                existing.transactions = [...existing.transactions, ...cycle.transactions]
-                  .sort((a, b) => b.date.localeCompare(a.date))
-                existing.total += cycle.total
-                const catMap = new Map<string, number>()
-                for (const cat of existing.categories) catMap.set(cat.name, cat.amount)
-                for (const cat of cycle.categories) catMap.set(cat.name, (catMap.get(cat.name) ?? 0) + cat.amount)
-                existing.categories = Array.from(catMap.entries())
-                  .map(([name, amount]) => ({ name, amount }))
-                  .sort((a, b) => b.amount - a.amount)
-              }
-            }
-          }
-          setCycles(Array.from(merged.values()).sort((a, b) => b.key.localeCompare(a.key)))
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setTransactionsError(err instanceof Error ? err.message : 'Unknown error')
-        }
-      } finally {
-        if (!cancelled) setTransactionsLoading(false)
-      }
-    }
-
-    fetchAll()
-    return () => { cancelled = true }
-  }, [creditCards, windowFrom, windowTo])
+  const transactionsError: string | null = null
 
   const currentCycleKey = new Date().toISOString().slice(0, 7)
 

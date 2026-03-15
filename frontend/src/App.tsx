@@ -13,7 +13,7 @@ import { EditManualPositionModal } from '@/components/modals/EditManualPositionM
 import { INVESTMENT_TYPE_LABELS, SUBTYPE_LABELS } from '@/constants/investments'
 import { getStoredItems, storeItems, getManualPositions, saveManualPositions, fetchItemName } from '@/lib/storage'
 import { formatCurrency } from '@/lib/format'
-import type { HealthStatus, AccountsSummary, InvestmentsSummary, InvestmentPosition, ConnectedItem, ManualPosition, Page, CreditCardAccount } from '@/types'
+import type { HealthStatus, AccountsSummary, InvestmentsSummary, InvestmentPosition, ConnectedItem, ManualPosition, Page, CreditCardAccount, BillingCycle } from '@/types'
 import './App.css'
 
 function App() {
@@ -35,6 +35,8 @@ function App() {
   const [creditCards, setCreditCards] = useState<CreditCardAccount[]>([])
   const [creditCardsLoading, setCreditCardsLoading] = useState(false)
   const [creditCardsError, setCreditCardsError] = useState<string | null>(null)
+  const [billingCycles, setBillingCycles] = useState<BillingCycle[]>([])
+  const [billingCyclesLoading, setBillingCyclesLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [manualPositions, setManualPositions] = useState<ManualPosition[]>(getManualPositions)
   const [showAddModal, setShowAddModal] = useState(false)
@@ -166,6 +168,76 @@ function App() {
     }
   }, [items, fetchAllCreditCards])
 
+  // Fetch billing cycles across all credit cards
+  useEffect(() => {
+    if (creditCards.length === 0) {
+      setBillingCycles([])
+      return
+    }
+    let cancelled = false
+
+    const windowFrom = (() => {
+      const d = new Date()
+      d.setMonth(d.getMonth() - 5)
+      d.setDate(1)
+      return d.toISOString().split('T')[0]
+    })()
+
+    const windowTo = (() => {
+      const d = new Date()
+      d.setMonth(d.getMonth() + 1)
+      d.setDate(0)
+      return d.toISOString().split('T')[0]
+    })()
+
+    async function fetchCycles() {
+      setBillingCyclesLoading(true)
+      try {
+        const allCardCycles = await Promise.all(
+          creditCards.map(card =>
+            fetch(`/api/transactions/${encodeURIComponent(card.id)}/cycles?from=${windowFrom}&to=${windowTo}`)
+              .then(async res => {
+                if (!res.ok) {
+                  const body = await res.json().catch(() => ({}))
+                  throw new Error(body.error || `HTTP ${res.status}`)
+                }
+                return res.json() as Promise<BillingCycle[]>
+              })
+          )
+        )
+        if (!cancelled) {
+          const merged = new Map<string, BillingCycle>()
+          for (const cardCycles of allCardCycles) {
+            for (const cycle of cardCycles) {
+              const existing = merged.get(cycle.key)
+              if (!existing) {
+                merged.set(cycle.key, { ...cycle, transactions: [...cycle.transactions] })
+              } else {
+                existing.transactions = [...existing.transactions, ...cycle.transactions]
+                  .sort((a, b) => b.date.localeCompare(a.date))
+                existing.total += cycle.total
+                const catMap = new Map<string, number>()
+                for (const cat of existing.categories) catMap.set(cat.name, cat.amount)
+                for (const cat of cycle.categories) catMap.set(cat.name, (catMap.get(cat.name) ?? 0) + cat.amount)
+                existing.categories = Array.from(catMap.entries())
+                  .map(([name, amount]) => ({ name, amount }))
+                  .sort((a, b) => b.amount - a.amount)
+              }
+            }
+          }
+          setBillingCycles(Array.from(merged.values()).sort((a, b) => b.key.localeCompare(a.key)))
+        }
+      } catch {
+        // Billing cycle fetch failures are non-critical for dashboard
+      } finally {
+        if (!cancelled) setBillingCyclesLoading(false)
+      }
+    }
+
+    fetchCycles()
+    return () => { cancelled = true }
+  }, [creditCards])
+
   // Open the Pluggy Connect widget
   const handleConnectBank = async () => {
     try {
@@ -226,6 +298,7 @@ function App() {
     setPositionsError(null)
     setCreditCards([])
     setCreditCardsError(null)
+    setBillingCycles([])
     storeItems([])
   }
 
@@ -300,6 +373,8 @@ function App() {
               error={creditCardsError}
               onRetry={() => fetchAllCreditCards(items)}
               formatCurrency={formatCurrency}
+              billingCycles={billingCycles}
+              billingCyclesLoading={billingCyclesLoading}
             />
           )}
           {currentPage === 'projections' && (
@@ -328,6 +403,10 @@ function App() {
               onDisconnectAll={handleDisconnectAll}
               onRetryAccounts={() => fetchAllAccounts(items)}
               onRetryInvestments={() => fetchAllInvestments(items)}
+              allPositions={allPositions}
+              creditCards={creditCards}
+              billingCycles={billingCycles}
+              billingCyclesLoading={billingCyclesLoading}
             />
           )}
         </div>
