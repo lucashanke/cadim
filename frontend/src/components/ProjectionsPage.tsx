@@ -24,6 +24,7 @@ interface ProjectionsPageProps {
 const stackedChartConfig: ChartConfig = {
   savings: { label: 'Savings', color: 'hsl(215, 30%, 45%)' },
   investments: { label: 'Investments', color: 'hsl(270, 40%, 55%)' },
+  compoundInterest: { label: 'Compound Interest', color: 'hsl(150, 50%, 45%)' },
 }
 
 const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
@@ -62,6 +63,10 @@ export function ProjectionsPage({ positions, accountsSummary, items, formatCurre
   const [grossSalary, setGrossSalary] = useState<string>(() => {
     const saved = getSalaryConfig()
     return saved ? String(saved.grossSalary) : ''
+  })
+  const [thirteenthFirstMonth, setThirteenthFirstMonth] = useState<number>(() => {
+    const saved = getSalaryConfig()
+    return saved?.thirteenthFirstMonth ?? 10
   })
   const [avgExpenses, setAvgExpenses] = useState<string>('')
   const [avgExpensesLoading, setAvgExpensesLoading] = useState(false)
@@ -110,9 +115,9 @@ export function ProjectionsPage({ positions, accountsSummary, items, formatCurre
   useEffect(() => {
     const val = parseFloat(grossSalary)
     if (val > 0) {
-      saveSalaryConfig({ grossSalary: val })
+      saveSalaryConfig({ grossSalary: val, thirteenthFirstMonth })
     }
-  }, [grossSalary])
+  }, [grossSalary, thirteenthFirstMonth])
 
   const cdiAnnual = parseFloat(cdiOverride) || 0
   const ipcaAnnual = parseFloat(ipcaOverride) || 0
@@ -129,8 +134,9 @@ export function ProjectionsPage({ positions, accountsSummary, items, formatCurre
         ipcaAnnual,
         grossSalary: grossSalaryNum,
         avgMonthlyExpenses: avgExpensesNum,
+        thirteenthFirstMonth,
       }),
-    [positions, accountsBalance, cdiAnnual, ipcaAnnual, grossSalaryNum, avgExpensesNum],
+    [positions, accountsBalance, cdiAnnual, ipcaAnnual, grossSalaryNum, avgExpensesNum, thirteenthFirstMonth],
   )
 
   const currentTotal = projectionData[0]?.total ?? 0
@@ -148,9 +154,9 @@ export function ProjectionsPage({ positions, accountsSummary, items, formatCurre
     const year = now.getFullYear()
     const rows: { month: string; monthIdx: number; gross: number; inss: number; irrf: number; net: number; note: string }[] = []
     for (let m = now.getMonth(); m <= 11; m++) {
-      const income = calculateMonthlyIncome(grossSalaryNum, m)
+      const income = calculateMonthlyIncome(grossSalaryNum, m, thirteenthFirstMonth)
       let note = ''
-      if (m === 10) note = '13th 1st installment'
+      if (m === thirteenthFirstMonth) note = '13th 1st installment'
       if (m === 11) note = '13th 2nd installment'
       rows.push({
         month: `${MONTH_NAMES[m]} ${year}`,
@@ -163,7 +169,7 @@ export function ProjectionsPage({ positions, accountsSummary, items, formatCurre
       })
     }
     return rows
-  }, [grossSalaryNum])
+  }, [grossSalaryNum, thirteenthFirstMonth])
 
   // Growth attribution: contributions vs compound interest
   const growthAttribution = useMemo(() => {
@@ -173,13 +179,13 @@ export function ProjectionsPage({ positions, accountsSummary, items, formatCurre
     let totalContributions = 0
     for (let m = now.getMonth() + 1; m <= 11; m++) {
       if (grossSalaryNum > 0) {
-        const income = calculateMonthlyIncome(grossSalaryNum, m)
+        const income = calculateMonthlyIncome(grossSalaryNum, m, thirteenthFirstMonth)
         totalContributions += income.netIncome - avgExpensesNum
       }
     }
     const fromInterest = totalGain - totalContributions
     return { totalGain, totalContributions, fromInterest }
-  }, [projectionData, endTotal, currentTotal, grossSalaryNum, avgExpensesNum])
+  }, [projectionData, endTotal, currentTotal, grossSalaryNum, avgExpensesNum, thirteenthFirstMonth])
 
   return (
     <div className="space-y-6">
@@ -292,6 +298,21 @@ export function ProjectionsPage({ positions, accountsSummary, items, formatCurre
                       value={grossSalary}
                       onChange={(e) => setGrossSalary(e.target.value)}
                     />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="thirteenth-month" className="text-xs text-muted-foreground">
+                      13th Salary 1st Installment
+                    </Label>
+                    <select
+                      id="thirteenth-month"
+                      value={thirteenthFirstMonth}
+                      onChange={(e) => setThirteenthFirstMonth(Number(e.target.value))}
+                      className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                    >
+                      {MONTH_NAMES.map((name, idx) => (
+                        <option key={idx} value={idx}>{name}</option>
+                      ))}
+                    </select>
                   </div>
                   <div className="space-y-1.5">
                     <Label htmlFor="avg-expenses" className="text-xs text-muted-foreground">
@@ -469,6 +490,15 @@ export function ProjectionsPage({ positions, accountsSummary, items, formatCurre
                   strokeWidth={2}
                   fill="var(--color-savings)"
                   fillOpacity={0.3}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="compoundInterest"
+                  stackId="1"
+                  stroke="var(--color-compoundInterest)"
+                  strokeWidth={2}
+                  fill="var(--color-compoundInterest)"
+                  fillOpacity={0.4}
                   activeDot={{ r: 5, strokeWidth: 2, stroke: 'hsl(var(--background))' }}
                 />
               </AreaChart>

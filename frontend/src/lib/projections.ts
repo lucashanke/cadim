@@ -7,6 +7,7 @@ export interface ProjectionDataPoint {
   total: number
   savings: number
   investments: number
+  compoundInterest: number
 }
 
 export interface ProjectionParams {
@@ -16,6 +17,7 @@ export interface ProjectionParams {
   ipcaAnnual: number
   grossSalary: number        // 0 = salary disabled (backward compat)
   avgMonthlyExpenses: number  // 0 = no expenses
+  thirteenthFirstMonth?: number // 0-indexed month for 13th 1st installment (default 10 = November)
 }
 
 const FLAT_TYPES = new Set([
@@ -74,7 +76,7 @@ export function projectPosition(
 }
 
 export function projectNetWorth(params: ProjectionParams): ProjectionDataPoint[] {
-  const { positions, accountsBalance, cdiAnnual, ipcaAnnual, grossSalary, avgMonthlyExpenses } = params
+  const { positions, accountsBalance, cdiAnnual, ipcaAnnual, grossSalary, avgMonthlyExpenses, thirteenthFirstMonth } = params
 
   const now = new Date()
   const endYear = now.getFullYear()
@@ -82,6 +84,9 @@ export function projectNetWorth(params: ProjectionParams): ProjectionDataPoint[]
   const cdiMonthly = annualToMonthly(cdiAnnual)
 
   let savings = accountsBalance
+  let savingsBase = accountsBalance // tracks savings without CDI compounding
+
+  const baseInvestments = positions.reduce((sum, pos) => sum + pos.amount, 0)
 
   // Current month through December of current year
   for (let m = now.getMonth(); m <= 11; m++) {
@@ -89,10 +94,40 @@ export function projectNetWorth(params: ProjectionParams): ProjectionDataPoint[]
     const monthKey = `${endYear}-${String(m + 1).padStart(2, '0')}`
     const label = monthDate.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
 
-    if (m > now.getMonth()) {
-      if (grossSalary > 0) {
-        const income = calculateMonthlyIncome(grossSalary, m)
-        savings += income.netIncome - avgMonthlyExpenses
+    if (m >= now.getMonth()) {
+      if (m === now.getMonth()) {
+        // Current month: balance already reflects partial income/expenses
+        if (grossSalary > 0) {
+          const income = calculateMonthlyIncome(grossSalary, m, thirteenthFirstMonth)
+          const advance = grossSalary * 0.5
+          const remainder = income.netIncome - advance
+          const today = now.getDate()
+          const daysInMonth = new Date(endYear, m + 1, 0).getDate()
+
+          let pendingIncome: number
+          if (today < 15) {
+            pendingIncome = income.netIncome // neither payment received
+          } else if (today < daysInMonth) {
+            pendingIncome = remainder // advance already in balance
+          } else {
+            pendingIncome = 0 // all received
+          }
+
+          const daysLeft = daysInMonth - today
+          const remainingExpenses = avgMonthlyExpenses * (daysLeft / daysInMonth)
+
+          const contribution = pendingIncome - remainingExpenses
+          savings += contribution
+          savingsBase += contribution
+        }
+      } else {
+        // Future months: full income minus full expenses
+        if (grossSalary > 0) {
+          const income = calculateMonthlyIncome(grossSalary, m, thirteenthFirstMonth)
+          const contribution = income.netIncome - avgMonthlyExpenses
+          savings += contribution
+          savingsBase += contribution
+        }
       }
       savings *= (1 + cdiMonthly)
     }
@@ -102,9 +137,10 @@ export function projectNetWorth(params: ProjectionParams): ProjectionDataPoint[]
       investmentsTotal += projectPosition(pos, monthDate, cdiAnnual, ipcaAnnual)
     }
 
+    const compoundInterest = (savings - savingsBase) + (investmentsTotal - baseInvestments)
     const total = savings + investmentsTotal
 
-    points.push({ month: monthKey, label, total, savings, investments: investmentsTotal })
+    points.push({ month: monthKey, label, total, savings: savingsBase, investments: baseInvestments, compoundInterest })
   }
 
   return points

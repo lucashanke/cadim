@@ -1,4 +1,5 @@
 import { projectPosition, projectNetWorth } from './projections'
+import { calculateMonthlyIncome } from './clt-taxes'
 import type { InvestmentPosition } from '@/types'
 
 function makePosition(overrides: Partial<InvestmentPosition> = {}): InvestmentPosition {
@@ -134,10 +135,11 @@ describe('projectNetWorth', () => {
     })
 
     expect(points).toHaveLength(expectedCount)
-    expect(points[0].total).toBe(10000) // accounts balance only
+    // First point: balance + pending income - remaining expenses + CDI
+    expect(points[0].total).toBeGreaterThan(9000)
     // Last point should show CDI growth on savings
     if (points.length > 1) {
-      expect(points[points.length - 1].total).toBeGreaterThan(10000)
+      expect(points[points.length - 1].total).toBeGreaterThan(points[0].total)
     }
   })
 
@@ -175,7 +177,8 @@ describe('projectNetWorth', () => {
       ...defaultSalaryParams,
     })
 
-    expect(points[0].total).toBe(20000)
+    // No salary, so no partial-month adjustment — just CDI compounding
+    expect(points[0].total).toBeGreaterThan(19900)
   })
 
   it('has proper month labels', () => {
@@ -192,7 +195,7 @@ describe('projectNetWorth', () => {
     expect(points[0].label).toMatch(/\w+ \d{4}/)
   })
 
-  it('salary with expenses: savings grow each month', () => {
+  it('salary with expenses: total grows each month', () => {
     const points = projectNetWorth({
       positions: [],
       accountsBalance: 10000,
@@ -204,13 +207,13 @@ describe('projectNetWorth', () => {
     })
 
     if (points.length > 2) {
-      // Savings should grow over time (net income > expenses)
-      expect(points[1].savings).toBeGreaterThan(points[0].savings)
-      expect(points[2].savings).toBeGreaterThan(points[1].savings)
+      // Total should grow over time (net income > expenses + CDI compounding)
+      expect(points[1].total).toBeGreaterThan(points[0].total)
+      expect(points[2].total).toBeGreaterThan(points[1].total)
     }
   })
 
-  it('cumulative compounding: month 2 builds on month 1', () => {
+  it('cumulative compounding: compound interest grows over time', () => {
     const points = projectNetWorth({
       positions: [],
       accountsBalance: 0,
@@ -222,15 +225,12 @@ describe('projectNetWorth', () => {
     })
 
     if (points.length > 2) {
-      // Month 2 savings should be more than just one month's surplus
-      // because it compounds the previous month's savings
-      const surplus1 = points[1].savings - points[0].savings
-      const surplus2 = points[2].savings - points[1].savings
-      expect(surplus2).toBeGreaterThan(surplus1)
+      // Compound interest should increase as savings base grows
+      expect(points[2].compoundInterest).toBeGreaterThan(points[1].compoundInterest)
     }
   })
 
-  it('zero salary: savings still compound at CDI', () => {
+  it('zero salary: compound interest grows at CDI', () => {
     const points = projectNetWorth({
       positions: [],
       accountsBalance: 10000,
@@ -241,12 +241,46 @@ describe('projectNetWorth', () => {
       avgMonthlyExpenses: 0,
     })
 
-    // First month is current value
-    expect(points[0].total).toBe(10000)
-    // Subsequent months should grow at CDI
+    // Savings base stays constant, compound interest grows
+    expect(points[0].savings).toBe(10000)
+    expect(points[0].compoundInterest).toBeGreaterThan(0)
     if (points.length > 1) {
-      expect(points[1].total).toBeGreaterThan(10000)
+      expect(points[1].savings).toBe(10000)
+      expect(points[1].compoundInterest).toBeGreaterThan(points[0].compoundInterest)
+      expect(points[1].total).toBeGreaterThan(points[0].total)
     }
+  })
+
+  it('current month uses partial income based on day-of-month', () => {
+    const now = new Date()
+    const today = now.getDate()
+    const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
+
+    // With salary but zero CDI/expenses to isolate the partial income effect
+    const points = projectNetWorth({
+      positions: [],
+      accountsBalance: 0,
+      cdiAnnual: 0,
+      ipcaAnnual: 0,
+      grossSalary: 10000,
+      avgMonthlyExpenses: 0,
+    })
+
+    const income = calculateMonthlyIncome(10000, now.getMonth())
+    const advance = 10000 * 0.5
+    const remainder = income.netIncome - advance
+
+    let expectedPending: number
+    if (today < 15) {
+      expectedPending = income.netIncome
+    } else if (today < daysInMonth) {
+      expectedPending = remainder
+    } else {
+      expectedPending = 0
+    }
+
+    // Current month savings should equal pending income (no expenses, no CDI)
+    expect(points[0].savings).toBeCloseTo(expectedPending, 0)
   })
 
   it('November has higher income from 13th 1st installment', () => {
