@@ -1,41 +1,60 @@
-import { useState, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Skeleton } from '@/components/ui/skeleton'
 import { AlertCircle, PlusCircle, BarChart3, Pencil, Trash2, ChevronUp, ChevronDown, Wallet, Banknote, TrendingUp, CalendarClock } from 'lucide-react'
-import { INVESTMENT_TYPE_LABELS, INVESTMENT_TYPE_COLORS, SUBTYPE_LABELS } from '@/constants/investments'
 import { colorBadgeStyle } from '@/lib/color'
-import { formatRate } from '@/lib/investments'
-import type { ConnectedItem, InvestmentPosition } from '@/types'
+import * as api from '@/lib/api'
+import type { BffPosition, BffInvestmentsResponse } from '@/lib/api'
+import type { ManualPosition } from '@/types'
 import { DebugPanel } from './DebugPanel'
 
 interface InvestmentsPageProps {
-  items: ConnectedItem[]
-  positions: InvestmentPosition[]
-  loading: boolean
-  error: string | null
-  onRetry: () => void
   formatCurrency: (value: number, currency: string) => string
-  manualPositionIds: Set<string>
   onAddPosition: () => void
-  onEditPosition: (pos: InvestmentPosition) => void
+  onEditPosition: (pos: ManualPosition) => void
   onRemovePosition: (id: string) => void
+  refreshTrigger: number
 }
 
 export function InvestmentsPage({
-  items,
-  positions,
-  loading,
-  error,
-  onRetry,
   formatCurrency,
-  manualPositionIds,
   onAddPosition,
   onEditPosition,
   onRemovePosition,
+  refreshTrigger,
 }: InvestmentsPageProps) {
+  const [data, setData] = useState<BffInvestmentsResponse | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  const fetchData = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const result = await api.getInvestments()
+      setData(result)
+      if (result.errors.positions) {
+        setError(result.errors.positions)
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unknown error')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchData()
+  }, [fetchData, refreshTrigger])
+
+  const positions = data?.positions ?? []
+  const kpis = data?.kpis
+  const allocation = data?.allocation ?? []
+  const maturityGroups = data?.maturity_groups ?? []
+
   const [sortCol, setSortCol] = useState<string | null>(null)
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
   const [pieHover, setPieHover] = useState<{ name: string; x: number; y: number } | null>(null)
@@ -70,59 +89,18 @@ export function InvestmentsPage({
     })
   }, [positions, sortCol, sortDir])
 
-  const kpiData = useMemo(() => {
-    const total = positions.reduce((sum, p) => sum + p.amount, 0)
-    const fixedIncome = positions
-      .filter(p => p.investment_type === 'FIXED_INCOME' || p.investment_type === 'TREASURE')
-      .reduce((sum, p) => sum + p.amount, 0)
-    const variableIncome = positions
-      .filter(p => ['EQUITY', 'MUTUAL_FUND', 'ETF'].includes(p.investment_type))
-      .reduce((sum, p) => sum + p.amount, 0)
-    const manual = positions
-      .filter(p => manualPositionIds.has(p.id))
-      .reduce((sum, p) => sum + p.amount, 0)
-    return { total, fixedIncome, variableIncome, manual }
-  }, [positions, manualPositionIds])
-
-  const maturityGroups = useMemo(() => {
-    const now = new Date()
-    const groups: { label: string; total: number; count: number }[] = [
-      { label: 'Matured', total: 0, count: 0 },
-      { label: '< 6 months', total: 0, count: 0 },
-      { label: '6–12 months', total: 0, count: 0 },
-      { label: '1–2 years', total: 0, count: 0 },
-      { label: '2–5 years', total: 0, count: 0 },
-      { label: '5+ years', total: 0, count: 0 },
-      { label: 'No due date', total: 0, count: 0 },
-    ]
-    for (const p of positions) {
-      if (!p.due_date) {
-        groups[6].total += p.amount
-        groups[6].count++
-        continue
+  // Build subtype breakdown from allocation data (for pie tooltip)
+  const subtypesByType: Record<string, Record<string, number>> = {}
+  for (const entry of allocation) {
+    if (entry.subtypes.length > 0) {
+      subtypesByType[entry.type_key] = {}
+      for (const sub of entry.subtypes) {
+        subtypesByType[entry.type_key][sub.label] = sub.amount
       }
-      const due = new Date(p.due_date)
-      const diffMs = due.getTime() - now.getTime()
-      const diffMonths = diffMs / (1000 * 60 * 60 * 24 * 30.44)
-      if (diffMonths <= 0) { groups[0].total += p.amount; groups[0].count++ }
-      else if (diffMonths <= 6) { groups[1].total += p.amount; groups[1].count++ }
-      else if (diffMonths <= 12) { groups[2].total += p.amount; groups[2].count++ }
-      else if (diffMonths <= 24) { groups[3].total += p.amount; groups[3].count++ }
-      else if (diffMonths <= 60) { groups[4].total += p.amount; groups[4].count++ }
-      else { groups[5].total += p.amount; groups[5].count++ }
     }
-    return groups.filter(g => g.count > 0)
-  }, [positions])
+  }
 
-  const subtypesByType = positions.reduce((acc, p) => {
-    if (!acc[p.investment_type]) acc[p.investment_type] = {}
-    if (p.subtype) {
-      acc[p.investment_type][p.subtype] = (acc[p.investment_type][p.subtype] ?? 0) + p.amount
-    }
-    return acc
-  }, {} as Record<string, Record<string, number>>)
-
-  if (items.length === 0 && positions.length === 0) {
+  if (!loading && positions.length === 0 && !error) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-center space-y-3">
         <BarChart3 className="h-12 w-12 text-muted-foreground/25" />
@@ -156,14 +134,56 @@ export function InvestmentsPage({
           <AlertTitle>Error</AlertTitle>
           <AlertDescription>
             {error}
-            <Button variant="outline" size="sm" className="ml-4 mt-2" onClick={onRetry}>
+            <Button variant="outline" size="sm" className="ml-4 mt-2" onClick={fetchData}>
               Retry
             </Button>
           </AlertDescription>
         </Alert>
       )}
 
-      {positions.length > 0 && (
+      {loading ? (
+        <>
+          {/* Skeleton KPI cards with staggered rise-in + shimmer */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {[0, 1, 2, 3].map((i) => (
+              <Card
+                key={i}
+                className="overflow-hidden shimmer opacity-0"
+                style={{ animation: `rise-in 0.5s ease-out ${i * 0.12}s forwards` }}
+              >
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 pt-2.5 px-4">
+                  <Skeleton className="h-3 w-24 rounded" />
+                  <Skeleton className="h-9 w-9 rounded-xl" />
+                </CardHeader>
+                <CardContent className="px-4 pb-3 space-y-2">
+                  <Skeleton className="h-7 w-32 rounded" />
+                  <Skeleton className="h-3 w-20 rounded" />
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+
+          {/* Skeleton positions table */}
+          <Card
+            className="overflow-hidden shimmer opacity-0"
+            style={{ animation: 'rise-in 0.5s ease-out 0.48s forwards' }}
+          >
+            <CardHeader className="px-5 pt-5 pb-3">
+              <Skeleton className="h-5 w-24 rounded" />
+              <Skeleton className="h-3 w-64 rounded mt-1" />
+            </CardHeader>
+            <CardContent className="px-5 pb-5 space-y-3">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <Skeleton
+                  key={i}
+                  className="h-10 w-full rounded opacity-0"
+                  style={{ animation: `rise-in 0.4s ease-out ${0.6 + i * 0.08}s forwards` }}
+                />
+              ))}
+            </CardContent>
+          </Card>
+        </>
+      ) : kpis && positions.length > 0 ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <Card className="overflow-hidden group transition-shadow hover:shadow-lg hover:shadow-black/30">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 pt-2.5 px-4">
@@ -173,8 +193,8 @@ export function InvestmentsPage({
               </div>
             </CardHeader>
             <CardContent className="px-4 pb-3">
-              <div className="text-2xl font-bold font-heading tracking-tight">{formatCurrency(kpiData.total, 'BRL')}</div>
-              <p className="text-xs text-muted-foreground mt-1">{positions.length} position{positions.length !== 1 ? 's' : ''}</p>
+              <div className="text-2xl font-bold font-heading tracking-tight">{formatCurrency(kpis.total_portfolio, 'BRL')}</div>
+              <p className="text-xs text-muted-foreground mt-1">{kpis.position_count} position{kpis.position_count !== 1 ? 's' : ''}</p>
             </CardContent>
           </Card>
           <Card className="overflow-hidden group transition-shadow hover:shadow-lg hover:shadow-black/30">
@@ -185,8 +205,8 @@ export function InvestmentsPage({
               </div>
             </CardHeader>
             <CardContent className="px-4 pb-3">
-              <div className="text-2xl font-bold font-heading tracking-tight">{formatCurrency(kpiData.fixedIncome, 'BRL')}</div>
-              <p className="text-xs text-muted-foreground mt-1">{kpiData.total > 0 ? ((kpiData.fixedIncome / kpiData.total) * 100).toFixed(1) : '0'}% of portfolio</p>
+              <div className="text-2xl font-bold font-heading tracking-tight">{formatCurrency(kpis.fixed_income, 'BRL')}</div>
+              <p className="text-xs text-muted-foreground mt-1">{kpis.fixed_income_pct.toFixed(1)}% of portfolio</p>
             </CardContent>
           </Card>
           <Card className="overflow-hidden group transition-shadow hover:shadow-lg hover:shadow-black/30">
@@ -197,8 +217,8 @@ export function InvestmentsPage({
               </div>
             </CardHeader>
             <CardContent className="px-4 pb-3">
-              <div className="text-2xl font-bold font-heading tracking-tight">{formatCurrency(kpiData.variableIncome, 'BRL')}</div>
-              <p className="text-xs text-muted-foreground mt-1">{kpiData.total > 0 ? ((kpiData.variableIncome / kpiData.total) * 100).toFixed(1) : '0'}% of portfolio</p>
+              <div className="text-2xl font-bold font-heading tracking-tight">{formatCurrency(kpis.variable_income, 'BRL')}</div>
+              <p className="text-xs text-muted-foreground mt-1">{kpis.variable_income_pct.toFixed(1)}% of portfolio</p>
             </CardContent>
           </Card>
           <Card className="overflow-hidden group transition-shadow hover:shadow-lg hover:shadow-black/30">
@@ -209,23 +229,16 @@ export function InvestmentsPage({
               </div>
             </CardHeader>
             <CardContent className="px-4 pb-3">
-              <div className="text-2xl font-bold font-heading tracking-tight">{formatCurrency(kpiData.manual, 'BRL')}</div>
-              <p className="text-xs text-muted-foreground mt-1">{manualPositionIds.size} manual position{manualPositionIds.size !== 1 ? 's' : ''}</p>
+              <div className="text-2xl font-bold font-heading tracking-tight">{formatCurrency(kpis.manual_total, 'BRL')}</div>
+              <p className="text-xs text-muted-foreground mt-1">{kpis.manual_count} manual position{kpis.manual_count !== 1 ? 's' : ''}</p>
             </CardContent>
           </Card>
         </div>
-      )}
+      ) : null}
 
       <div className="flex flex-wrap gap-6">
-      {positions.length > 0 && (() => {
-        const pieData = Object.entries(
-          positions.reduce((acc, p) => {
-            acc[p.investment_type] = (acc[p.investment_type] ?? 0) + p.amount
-            return acc
-          }, {} as Record<string, number>)
-        )
-          .map(([type, value]) => ({ name: type, value }))
-          .sort((a, b) => b.value - a.value)
+      {allocation.length > 0 && (() => {
+        const pieData = allocation.map(a => ({ name: a.type_key, value: a.amount, color: a.color }))
         const total = pieData.reduce((s, d) => s + d.value, 0)
         return (
           <Card className="w-fit">
@@ -262,7 +275,7 @@ export function InvestmentsPage({
                         {pieData.map((entry) => (
                           <Cell
                             key={entry.name}
-                            fill={INVESTMENT_TYPE_COLORS[entry.name] ?? INVESTMENT_TYPE_COLORS.OTHER}
+                            fill={entry.color}
                             opacity={0.85}
                           />
                         ))}
@@ -270,41 +283,34 @@ export function InvestmentsPage({
                     </PieChart>
                   </ResponsiveContainer>
                   {pieHover && pieHover.x > 0 && (() => {
-                    const d = pieData.find(p => p.name === pieHover.name)
-                    if (!d) return null
-                    const pct = total > 0 ? ((d.value / total) * 100).toFixed(1) : '0'
-                    const label = INVESTMENT_TYPE_LABELS[d.name]?.label ?? d.name
-                    const subtypes = Object.entries(subtypesByType[d.name] ?? {})
-                      .sort((a, b) => b[1] - a[1])
+                    const alloc = allocation.find(a => a.type_key === pieHover.name)
+                    if (!alloc) return null
+                    const pct = total > 0 ? ((alloc.amount / total) * 100).toFixed(1) : '0'
                     return (
                       <div
                         className="fixed z-50 pointer-events-none rounded-lg border border-border bg-background px-3 py-2.5 shadow-xl text-xs min-w-[180px]"
                         style={{ left: pieHover.x + 12, top: pieHover.y - 12 }}
                       >
                         <div className="flex items-center gap-2 mb-1.5">
-                          <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ background: INVESTMENT_TYPE_COLORS[d.name] ?? INVESTMENT_TYPE_COLORS.OTHER }} />
-                          <span className="font-semibold text-foreground">{label}</span>
+                          <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ background: alloc.color }} />
+                          <span className="font-semibold text-foreground">{alloc.label}</span>
                         </div>
                         <div className="flex items-center justify-between gap-4">
                           <span className="text-muted-foreground">Amount</span>
-                          <span className="font-medium tabular-nums">{formatCurrency(d.value, 'BRL')}</span>
+                          <span className="font-medium tabular-nums">{formatCurrency(alloc.amount, 'BRL')}</span>
                         </div>
                         <div className="flex items-center justify-between gap-4">
                           <span className="text-muted-foreground">Share</span>
                           <span className="font-medium tabular-nums">{pct}%</span>
                         </div>
-                        {subtypes.length > 0 && (
+                        {alloc.subtypes.length > 0 && (
                           <div className="mt-1.5 pt-1.5 border-t border-border space-y-1">
-                            {subtypes.map(([subtype, amount]) => {
-                              const subPct = d.value > 0 ? ((amount / d.value) * 100).toFixed(1) : '0'
-                              const subLabel = SUBTYPE_LABELS[subtype]?.label ?? subtype
-                              return (
-                                <div key={subtype} className="flex items-center justify-between gap-4">
-                                  <span className="text-muted-foreground">{subLabel}</span>
-                                  <span className="tabular-nums text-muted-foreground">{subPct}%</span>
-                                </div>
-                              )
-                            })}
+                            {alloc.subtypes.map((sub) => (
+                              <div key={sub.subtype_key} className="flex items-center justify-between gap-4">
+                                <span className="text-muted-foreground">{sub.label}</span>
+                                <span className="tabular-nums text-muted-foreground">{sub.percentage.toFixed(1)}%</span>
+                              </div>
+                            ))}
                           </div>
                         )}
                       </div>
@@ -312,17 +318,15 @@ export function InvestmentsPage({
                   })()}
                 </div>
                 <div className="flex flex-col gap-3 flex-1 w-full">
-                  {pieData.map((d) => {
-                    const color = INVESTMENT_TYPE_COLORS[d.name] ?? INVESTMENT_TYPE_COLORS.OTHER
-                    const label = INVESTMENT_TYPE_LABELS[d.name]?.label ?? d.name
-                    const pct = total > 0 ? ((d.value / total) * 100) : 0
+                  {allocation.map((a) => {
+                    const pct = total > 0 ? ((a.amount / total) * 100) : 0
                     return (
-                      <div key={d.name} className="flex items-center gap-3">
-                        <span className="h-2 w-2 rounded-full shrink-0" style={{ background: color, opacity: 0.85 }} />
-                        <span className="text-xs text-muted-foreground flex-1">{label}</span>
+                      <div key={a.type_key} className="flex items-center gap-3">
+                        <span className="h-2 w-2 rounded-full shrink-0" style={{ background: a.color, opacity: 0.85 }} />
+                        <span className="text-xs text-muted-foreground flex-1">{a.label}</span>
                         <div className="flex items-center gap-3">
                           <div className="w-24 h-1.5 rounded-full bg-secondary overflow-hidden">
-                            <div className="h-full rounded-full" style={{ width: `${pct}%`, background: color, opacity: 0.75 }} />
+                            <div className="h-full rounded-full" style={{ width: `${pct}%`, background: a.color, opacity: 0.75 }} />
                           </div>
                           <span className="text-xs font-medium text-foreground tabular-nums w-10 text-right">{pct.toFixed(1)}%</span>
                         </div>
@@ -338,7 +342,7 @@ export function InvestmentsPage({
 
       {maturityGroups.length > 0 && (() => {
         const maxTotal = Math.max(...maturityGroups.map(g => g.total))
-        const total = positions.reduce((s, p) => s + p.amount, 0)
+        const total = kpis?.total_portfolio ?? 0
         return (
           <Card className="flex-1 min-w-[320px]">
             <CardHeader className="px-5 pt-5 pb-3">
@@ -386,13 +390,7 @@ export function InvestmentsPage({
           </CardDescription>
         </CardHeader>
         <CardContent className="px-0 pb-0">
-          {loading ? (
-            <div className="px-5 pb-5 space-y-3">
-              {Array.from({ length: 5 }).map((_, i) => (
-                <Skeleton key={i} className="h-10 w-full bg-secondary" />
-              ))}
-            </div>
-          ) : positions.length === 0 ? (
+          {positions.length === 0 && !loading ? (
             <div className="flex flex-col items-center justify-center py-16 text-center space-y-3">
               <BarChart3 className="h-10 w-10 text-muted-foreground/25" />
               <p className="text-sm text-muted-foreground/50">No investment positions found</p>
@@ -422,7 +420,7 @@ export function InvestmentsPage({
                   </tr>
                 </thead>
                 <tbody>
-                  {sortedPositions.map((pos, idx) => (
+                  {sortedPositions.map((pos) => (
                     <tr
                       key={pos.id}
                       className="border-b border-border/40 last:border-0 hover:bg-secondary/50 transition-colors"
@@ -430,27 +428,23 @@ export function InvestmentsPage({
                       <td className="px-5 py-3.5 font-medium text-foreground">
                         <span className="flex items-center gap-2">
                           {pos.name || '—'}
-                          {manualPositionIds.has(pos.id) && (
+                          {pos.is_manual && (
                             <span className="text-[9px] font-bold uppercase tracking-widest text-primary/60 border border-primary/20 rounded px-1">Manual</span>
                           )}
                         </span>
                       </td>
                       <td className="px-5 py-3.5">
-                        {pos.investment_type ? (() => {
-                          const color = INVESTMENT_TYPE_COLORS[pos.investment_type]
-                          const label = INVESTMENT_TYPE_LABELS[pos.investment_type]?.label ?? pos.investment_type
-                          return (
-                            <span style={color ? colorBadgeStyle(color) : undefined}
-                              className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold tracking-wide ${!color ? 'bg-secondary text-muted-foreground border-border' : ''}`}>
-                              {label}
-                            </span>
-                          )
-                        })() : '—'}
+                        {pos.investment_type ? (
+                          <span style={pos.type_color ? colorBadgeStyle(pos.type_color) : undefined}
+                            className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold tracking-wide ${!pos.type_color ? 'bg-secondary text-muted-foreground border-border' : ''}`}>
+                            {pos.type_label}
+                          </span>
+                        ) : '—'}
                       </td>
                       <td className="px-5 py-3.5">
                         {pos.subtype ? (
                           <span className="inline-flex items-center rounded-full border border-border px-2.5 py-0.5 text-xs font-semibold tracking-wide text-muted-foreground">
-                            {SUBTYPE_LABELS[pos.subtype]?.label ?? pos.subtype}
+                            {pos.subtype_label ?? pos.subtype}
                           </span>
                         ) : '—'}
                       </td>
@@ -461,12 +455,12 @@ export function InvestmentsPage({
                         {pos.due_date ? new Date(pos.due_date).toLocaleDateString('pt-BR') : '—'}
                       </td>
                       <td className="px-5 py-3.5 text-right text-muted-foreground font-mono text-xs">
-                        {formatRate(pos)}
+                        {pos.rate_display}
                       </td>
                       <td className="px-5 py-3.5 text-right">
-                        {manualPositionIds.has(pos.id) && (
+                        {pos.is_manual && (
                           <span className="inline-flex items-center gap-1">
-                            <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => onEditPosition(pos)}>
+                            <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => onEditPosition(bffToManual(pos))}>
                               <Pencil className="h-3 w-3" />
                             </Button>
                             <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => onRemovePosition(pos.id)}>
@@ -485,10 +479,20 @@ export function InvestmentsPage({
       </Card>
       <DebugPanel sections={[
         { label: 'positions', data: positions },
-        { label: 'kpiData', data: kpiData },
-        { label: 'manualPositionIds', data: Array.from(manualPositionIds) },
-        { label: 'items', data: items },
+        { label: 'kpis', data: kpis },
+        { label: 'allocation', data: allocation },
+        { label: 'maturityGroups', data: maturityGroups },
       ]} />
     </div>
   )
+}
+
+function bffToManual(pos: BffPosition): ManualPosition {
+  return {
+    id: pos.id,
+    investment_type: pos.investment_type,
+    subtype: pos.subtype,
+    amount: pos.amount,
+    due_date: pos.due_date,
+  }
 }

@@ -11,14 +11,6 @@ use crate::db::pluggy_items::{self, CreatePluggyItem, PluggyItem};
 use crate::error::AppError;
 use crate::state::AppState;
 
-pub async fn list(
-    auth: AuthUser,
-    State(state): State<Arc<AppState>>,
-) -> Result<Json<Vec<PluggyItem>>, AppError> {
-    let items = pluggy_items::list_items(&state.db, &auth.id).await?;
-    Ok(Json(items))
-}
-
 pub async fn create(
     auth: AuthUser,
     State(state): State<Arc<AppState>>,

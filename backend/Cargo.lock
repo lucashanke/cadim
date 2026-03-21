@@ -286,6 +286,7 @@ dependencies = [
  "axum-extra",
  "axum-test",
  "base64",
+ "chrono",
  "dotenvy",
  "hex",
  "hkdf",
@@ -346,6 +347,7 @@ dependencies = [
  "iana-time-zone",
  "js-sys",
  "num-traits",
+ "serde",
  "wasm-bindgen",
  "windows-link",
 ]

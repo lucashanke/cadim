@@ -3,7 +3,7 @@ import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { server } from '../test/msw-server'
-import { ITEM_ID, samplePositions } from '../test/msw-handlers'
+import { ITEM_ID, sampleBffInvestmentsResponse } from '../test/msw-handlers'
 import { renderWithRouter } from '../test/render'
 import App from '../App'
 
@@ -13,13 +13,21 @@ vi.mock('react-pluggy-connect', () => ({
 
 function seedItem() {
   server.use(
-    http.get('/api/pluggy-items', () =>
-      HttpResponse.json([{
-        id: 'internal-id',
-        user_id: 'test-user-id',
-        pluggy_item_id: ITEM_ID,
-        connector_name: 'Nubank',
-      }])
+    http.get('/api/bff/bootstrap', () =>
+      HttpResponse.json({
+        user: { id: 'test-user-id', email: 'test@example.com' },
+        items: [{ id: ITEM_ID, name: 'Nubank' }],
+        manual_positions: [],
+        has_compensation_config: false,
+      })
+    )
+  )
+}
+
+function seedBffInvestments() {
+  server.use(
+    http.get('/api/bff/investments', () =>
+      HttpResponse.json(sampleBffInvestmentsResponse)
     )
   )
 }
@@ -28,8 +36,6 @@ async function navigateToInvestments() {
   const user = userEvent.setup()
   await waitFor(() => screen.getByRole('link', { name: /^investments$/i }))
   await user.click(screen.getByRole('link', { name: /^investments$/i }))
-  // Add Position button appears in both empty and non-empty states
-  await waitFor(() => screen.getByRole('button', { name: /add position/i }))
   return user
 }
 
@@ -39,11 +45,14 @@ describe('InvestmentsPage integration', () => {
 
     await navigateToInvestments()
 
-    expect(screen.getByText(/connect a bank account to see your investment positions/i)).toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.getByText(/connect a bank account to see your investment positions/i)).toBeInTheDocument()
+    })
   })
 
   it('renders table with all positions from the API', async () => {
     seedItem()
+    seedBffInvestments()
     renderWithRouter(<App />)
 
     await navigateToInvestments()
@@ -57,7 +66,7 @@ describe('InvestmentsPage integration', () => {
   it('shows API error alert with Retry button', async () => {
     seedItem()
     server.use(
-      http.get('/api/investments/:id/list', () =>
+      http.get('/api/bff/investments', () =>
         HttpResponse.json({ error: 'Pluggy error' }, { status: 502 })
       )
     )
@@ -72,15 +81,64 @@ describe('InvestmentsPage integration', () => {
   })
 
   it('manual positions have Manual badge and edit/delete buttons', async () => {
-    // Add a manual position via cookie
-    const manualPos = {
-      id: 'manual_test',
-      investment_type: 'FIXED_INCOME',
-      subtype: 'CDB',
-      amount: 500,
-      due_date: null,
-    }
-    document.cookie = `manual_investment_positions=${encodeURIComponent(JSON.stringify([manualPos]))}; path=/`
+    server.use(
+      http.get('/api/bff/bootstrap', () =>
+        HttpResponse.json({
+          user: { id: 'test-user-id', email: 'test@example.com' },
+          items: [],
+          manual_positions: [{
+            id: 'manual_test',
+            investment_type: 'FIXED_INCOME',
+            subtype: 'CDB',
+            amount: 500,
+            due_date: null,
+          }],
+          has_compensation_config: false,
+        })
+      ),
+      http.get('/api/bff/investments', () =>
+        HttpResponse.json({
+          positions: [{
+            id: 'manual_test',
+            name: 'CDB',
+            investment_type: 'FIXED_INCOME',
+            type_label: 'Fixed Income',
+            type_color: '#e09020',
+            subtype: 'CDB',
+            subtype_label: 'CDB',
+            amount: 500,
+            currency_code: 'BRL',
+            date: null,
+            due_date: null,
+            rate: null,
+            rate_type: null,
+            fixed_annual_rate: null,
+            rate_display: '—',
+            is_manual: true,
+          }],
+          kpis: {
+            total_portfolio: 500,
+            fixed_income: 500,
+            fixed_income_pct: 100,
+            variable_income: 0,
+            variable_income_pct: 0,
+            manual_total: 500,
+            manual_count: 1,
+            position_count: 1,
+          },
+          allocation: [{
+            type_key: 'FIXED_INCOME',
+            label: 'Fixed Income',
+            amount: 500,
+            percentage: 100,
+            color: '#e09020',
+            subtypes: [{ subtype_key: 'CDB', label: 'CDB', amount: 500, percentage: 100 }],
+          }],
+          maturity_groups: [{ label: 'No due date', total: 500, count: 1, percentage: 100 }],
+          errors: { positions: null },
+        })
+      )
+    )
 
     renderWithRouter(<App />)
     await navigateToInvestments()
@@ -94,6 +152,7 @@ describe('InvestmentsPage integration', () => {
 
   it('clicking a sort column sorts the table ascending', async () => {
     seedItem()
+    seedBffInvestments()
     renderWithRouter(<App />)
     const user = await navigateToInvestments()
 
@@ -111,6 +170,7 @@ describe('InvestmentsPage integration', () => {
 
   it('clicking a sorted column again sorts descending', async () => {
     seedItem()
+    seedBffInvestments()
     renderWithRouter(<App />)
     const user = await navigateToInvestments()
 
@@ -128,6 +188,7 @@ describe('InvestmentsPage integration', () => {
 
   it('non-manual positions have no action buttons', async () => {
     seedItem()
+    seedBffInvestments()
     renderWithRouter(<App />)
     await navigateToInvestments()
 
@@ -145,10 +206,11 @@ describe('InvestmentsPage integration', () => {
     renderWithRouter(<App />)
     await navigateToInvestments()
 
-    // navigateToInvestments already asserts Add Position exists
-    expect(screen.getAllByRole('button', { name: /add position/i }).length).toBeGreaterThan(0)
+    await waitFor(() => {
+      expect(screen.getAllByRole('button', { name: /add position/i }).length).toBeGreaterThan(0)
+    })
   })
 })
 
-// Ensure samplePositions is used to avoid "unused import" error
-void samplePositions
+// Ensure sampleBffInvestmentsResponse is used to avoid "unused import" error
+void sampleBffInvestmentsResponse

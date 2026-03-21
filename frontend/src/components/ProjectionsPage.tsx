@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, ReferenceLine } from 'recharts'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -9,18 +9,16 @@ import { Sheet, SheetTrigger, SheetContent, SheetHeader, SheetTitle, SheetDescri
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import { TrendingUp, Percent, Wallet, PiggyBank, ChevronDown, ChevronRight, SlidersHorizontal, Plus, X, Gift, Info } from 'lucide-react'
-import { projectNetWorth } from '@/lib/projections'
-import { calculateMonthlyIncome, calculateAnnualBonuses } from '@/lib/clt-taxes'
-import { getCompensationConfig, saveCompensationConfig } from '@/lib/api'
-import type { SalaryDeduction } from '@/lib/storage'
-import type { InvestmentPosition, AccountsSummary, MarketRates, ConnectedItem, AverageExpensesResponse } from '@/types'
+import * as api from '@/lib/api'
 import { DebugPanel } from './DebugPanel'
 
 interface ProjectionsPageProps {
-  positions: InvestmentPosition[]
-  accountsSummary: AccountsSummary | null
-  items: ConnectedItem[]
   formatCurrency: (value: number, currency: string) => string
+}
+
+interface SalaryDeduction {
+  name: string
+  amount: number
 }
 
 const stackedChartConfig: ChartConfig = {
@@ -28,8 +26,6 @@ const stackedChartConfig: ChartConfig = {
   investments: { label: 'Investments', color: 'hsl(270, 40%, 55%)' },
   compoundInterest: { label: 'Compound Interest', color: 'hsl(150, 50%, 45%)' },
 }
-
-const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
 
 const CustomTooltip = ({ active, payload, label, formatCurrency }: { active?: boolean; payload?: { name: string; value: number; color: string }[]; label?: string; formatCurrency: (v: number, c: string) => string }) => {
   if (!active || !payload?.length) return null
@@ -57,9 +53,8 @@ const CustomTooltip = ({ active, payload, label, formatCurrency }: { active?: bo
   )
 }
 
-export function ProjectionsPage({ positions, accountsSummary, items, formatCurrency }: ProjectionsPageProps) {
-  const [rates, setRates] = useState<MarketRates | null>(null)
-  const [ratesLoading, setRatesLoading] = useState(true)
+export function ProjectionsPage({ formatCurrency }: ProjectionsPageProps) {
+  const [configLoading, setConfigLoading] = useState(true)
   const [cdiOverride, setCdiOverride] = useState<string>('')
   const [ipcaOverride, setIpcaOverride] = useState<string>('')
   const [grossSalary, setGrossSalary] = useState<string>('')
@@ -69,7 +64,6 @@ export function ProjectionsPage({ positions, accountsSummary, items, formatCurre
   const [newDeductionName, setNewDeductionName] = useState('')
   const [newDeductionAmount, setNewDeductionAmount] = useState('')
   const [avgExpenses, setAvgExpenses] = useState<string>('')
-  const [avgExpensesLoading, setAvgExpensesLoading] = useState(items.length > 0)
   const [monthsAnalyzed, setMonthsAnalyzed] = useState<number>(0)
   const [compoundSavings, setCompoundSavings] = useState<boolean>(false)
   const [configLoaded, setConfigLoaded] = useState(false)
@@ -77,80 +71,58 @@ export function ProjectionsPage({ positions, accountsSummary, items, formatCurre
   const [sheetRatesOpen, setSheetRatesOpen] = useState(true)
   const [sheetIncomeOpen, setSheetIncomeOpen] = useState(true)
   const [sheetBonusesOpen, setSheetBonusesOpen] = useState(true)
+  const [hasRatesFromBcb, setHasRatesFromBcb] = useState(false)
 
-  const dataReady = !ratesLoading && !avgExpensesLoading
+  // Computed results from backend
+  const [result, setResult] = useState<api.BffProjectionsComputeResponse | null>(null)
+  const [computing, setComputing] = useState(false)
 
+  // Load config on mount
   useEffect(() => {
-    async function fetchRates() {
+    async function loadConfig() {
       try {
-        const res = await fetch('/api/rates')
-        if (!res.ok) throw new Error('Failed to fetch rates')
-        const data: MarketRates = await res.json()
-        setRates(data)
-        setCdiOverride(data.cdi_annual.toFixed(2))
-        setIpcaOverride(data.ipca_annual.toFixed(2))
+        const config = await api.getProjectionsConfig()
+
+        if (config.rates) {
+          setCdiOverride(config.rates.cdi_annual.toFixed(2))
+          setIpcaOverride(config.rates.ipca_annual.toFixed(2))
+          setHasRatesFromBcb(true)
+        } else {
+          setCdiOverride('13.25')
+          setIpcaOverride('5.00')
+        }
+
+        if (config.expenses) {
+          setAvgExpenses(config.expenses.average_monthly_expenses.toFixed(2))
+          setMonthsAnalyzed(config.expenses.months_analyzed)
+        }
+
+        if (config.compensation) {
+          setGrossSalary(config.compensation.gross_salary ? String(config.compensation.gross_salary) : '')
+          setDeductions(config.compensation.deductions)
+          setCompoundSavings(config.compensation.compound_savings)
+          setThirteenthReceived(config.compensation.thirteenth_received ? String(config.compensation.thirteenth_received) : '')
+          setVacationThirdReceived(config.compensation.vacation_third_received ? String(config.compensation.vacation_third_received) : '')
+        }
       } catch {
         setCdiOverride('13.25')
         setIpcaOverride('5.00')
       } finally {
-        setRatesLoading(false)
-      }
-    }
-    fetchRates()
-  }, [])
-
-  useEffect(() => {
-    if (items.length === 0) return
-    async function fetchExpenses() {
-      setAvgExpensesLoading(true)
-      try {
-        const itemIds = items.map(i => encodeURIComponent(i.id)).join(',')
-        const res = await fetch(`/api/accounts/expenses?item_ids=${itemIds}`)
-        if (!res.ok) throw new Error('Failed to fetch expenses')
-        const data: AverageExpensesResponse = await res.json()
-        setAvgExpenses(data.average_monthly_expenses.toFixed(2))
-        setMonthsAnalyzed(data.months_analyzed)
-      } catch {
-        // Leave editable, user can input manually
-      } finally {
-        setAvgExpensesLoading(false)
-      }
-    }
-    fetchExpenses()
-  }, [items])
-
-  // Load compensation config from API
-  useEffect(() => {
-    async function loadConfig() {
-      try {
-        const config = await getCompensationConfig()
-        if (config) {
-          setGrossSalary(config.grossSalary ? String(config.grossSalary) : '')
-          setDeductions(config.deductions ?? [])
-          setCompoundSavings(config.compoundSavings ?? false)
-          const currentYear = new Date().getFullYear()
-          if (config.bonusYear === currentYear) {
-            setThirteenthReceived(config.thirteenthReceived ? String(config.thirteenthReceived) : '')
-            setVacationThirdReceived(config.vacationThirdReceived ? String(config.vacationThirdReceived) : '')
-          }
-        }
-      } catch {
-        // Config not found or error — start with empty fields
-      } finally {
+        setConfigLoading(false)
         setConfigLoaded(true)
       }
     }
     loadConfig()
   }, [])
 
-  // Save compensation config to API (debounced 500ms)
+  // Save compensation config (debounced 500ms)
   useEffect(() => {
     if (!configLoaded) return
     const val = parseFloat(grossSalary)
     if (!(val > 0)) return
 
     const timer = setTimeout(() => {
-      saveCompensationConfig({
+      api.saveCompensationConfig({
         grossSalary: val,
         deductions,
         thirteenthReceived: parseFloat(thirteenthReceived) || 0,
@@ -162,93 +134,70 @@ export function ProjectionsPage({ positions, accountsSummary, items, formatCurre
     return () => clearTimeout(timer)
   }, [grossSalary, deductions, thirteenthReceived, vacationThirdReceived, compoundSavings, configLoaded])
 
+  // Computed values for the form
   const cdiAnnual = parseFloat(cdiOverride) || 0
   const ipcaAnnual = parseFloat(ipcaOverride) || 0
-  const accountsBalance = accountsSummary?.total_balance ?? 0
   const grossSalaryNum = parseFloat(grossSalary) || 0
   const avgExpensesNum = parseFloat(avgExpenses) || 0
   const totalDeductions = deductions.reduce((sum, d) => sum + d.amount, 0)
   const thirteenthReceivedNum = parseFloat(thirteenthReceived) || 0
   const vacationThirdReceivedNum = parseFloat(vacationThirdReceived) || 0
 
-  const bonuses = useMemo(
-    () => grossSalaryNum > 0 ? calculateAnnualBonuses(grossSalaryNum) : null,
-    [grossSalaryNum],
-  )
-
-  const projectionData = useMemo(
-    () =>
-      projectNetWorth({
-        positions,
-        accountsBalance,
-        cdiAnnual,
-        ipcaAnnual,
-        grossSalary: grossSalaryNum,
-        avgMonthlyExpenses: avgExpensesNum,
-        otherDeductions: totalDeductions,
-        thirteenthReceived: thirteenthReceivedNum,
-        vacationThirdReceived: vacationThirdReceivedNum,
-        compoundSavings,
-      }),
-    [positions, accountsBalance, cdiAnnual, ipcaAnnual, grossSalaryNum, avgExpensesNum, totalDeductions, thirteenthReceivedNum, vacationThirdReceivedNum, compoundSavings],
-  )
-
-  const currentTotal = projectionData[0]?.total ?? 0
-  const decemberKey = `${new Date().getFullYear()}-12`
-  const decemberPoint = projectionData.find(p => p.month === decemberKey)
-  const decemberLabel = decemberPoint?.label ?? ''
-  const endOfYearTotal = decemberPoint?.total ?? projectionData[projectionData.length - 1]?.total ?? 0
-  const growthPct = currentTotal > 0 ? ((endOfYearTotal - currentTotal) / currentTotal) * 100 : 0
-
-  // Regular month income for display
-  const regularIncome = grossSalaryNum > 0 ? calculateMonthlyIncome(grossSalaryNum, totalDeductions) : null
-  const monthlySurplus = regularIncome ? regularIncome.netIncome - avgExpensesNum : 0
-
-  // Income schedule: month-by-month projected income
-  const incomeSchedule = useMemo(() => {
-    if (grossSalaryNum <= 0) return []
-    const now = new Date()
-    const year = now.getFullYear()
-    const rows: { month: string; monthIdx: number; gross: number; inss: number; irrf: number; otherDeductions: number; net: number; note: string }[] = []
-    for (let m = now.getMonth(); m <= 11; m++) {
-      const income = calculateMonthlyIncome(grossSalaryNum, totalDeductions)
-      const note = m === 11 ? '+ 13th & vacation 1/3' : ''
-      rows.push({
-        month: `${MONTH_NAMES[m]} ${year}`,
-        monthIdx: m,
-        gross: income.grossBeforeTax,
-        inss: income.inss,
-        irrf: income.irrf,
-        otherDeductions: income.otherDeductions,
-        net: income.netIncome,
-        note,
+  // Compute projections via backend (debounced 300ms)
+  const computeTimer = useRef<ReturnType<typeof setTimeout>>(null)
+  const computeProjections = useCallback(async () => {
+    setComputing(true)
+    try {
+      const res = await api.computeProjections({
+        cdi_annual: cdiAnnual,
+        ipca_annual: ipcaAnnual,
+        gross_salary: grossSalaryNum,
+        other_deductions: totalDeductions,
+        avg_monthly_expenses: avgExpensesNum,
+        thirteenth_received: thirteenthReceivedNum,
+        vacation_third_received: vacationThirdReceivedNum,
+        compound_savings: compoundSavings,
       })
+      setResult(res)
+    } catch (err) {
+      console.warn('Failed to compute projections', err)
+    } finally {
+      setComputing(false)
     }
-    return rows
-  }, [grossSalaryNum, totalDeductions])
+  }, [cdiAnnual, ipcaAnnual, grossSalaryNum, totalDeductions, avgExpensesNum, thirteenthReceivedNum, vacationThirdReceivedNum, compoundSavings])
 
-  // Growth attribution: contributions vs compound interest
-  const growthAttribution = useMemo(() => {
-    if (projectionData.length < 2) return null
+  useEffect(() => {
+    if (configLoading) return
+    if (computeTimer.current) clearTimeout(computeTimer.current)
+    computeTimer.current = setTimeout(computeProjections, 300)
+    return () => { if (computeTimer.current) clearTimeout(computeTimer.current) }
+  }, [configLoading, computeProjections])
+
+  // Derived from result
+  const projectionData = result?.projection ?? []
+  const regularIncome = result?.monthly_income ?? null
+  const bonuses = result?.annual_bonuses ?? null
+  const monthlySurplus = result?.summary.monthly_surplus ?? 0
+  const currentTotal = result?.summary.current_total ?? 0
+  const endOfYearTotal = result?.summary.end_of_year_total ?? 0
+  const decemberLabel = result?.summary.end_of_year_label ?? ''
+  const growthPct = result?.summary.growth_percentage ?? 0
+  const incomeSchedule = result?.income_schedule ?? []
+
+  // Growth attribution
+  const growthAttribution = (() => {
+    if (!result || projectionData.length < 2) return null
     const totalGain = endOfYearTotal - currentTotal
-    const now = new Date()
+    // Compute from projection data: total contributions = sum of savings increments
     let totalContributions = 0
-    for (let m = now.getMonth() + 1; m <= 11; m++) {
-      let contribution = -avgExpensesNum
-      if (grossSalaryNum > 0) {
-        const income = calculateMonthlyIncome(grossSalaryNum, totalDeductions)
-        contribution += income.netIncome
-        if (m === 11 && bonuses) {
-          const thirteenthRemaining = Math.max(0, bonuses.thirteenthNet - thirteenthReceivedNum)
-          const vacationThirdRemaining = Math.max(0, bonuses.vacationThirdNet - vacationThirdReceivedNum)
-          contribution += thirteenthRemaining + vacationThirdRemaining
-        }
-      }
-      totalContributions += contribution
+    for (let i = 1; i < projectionData.length; i++) {
+      totalContributions += projectionData[i].savings - projectionData[i - 1].savings
     }
     const fromInterest = totalGain - totalContributions
     return { totalGain, totalContributions, fromInterest }
-  }, [projectionData, endOfYearTotal, currentTotal, grossSalaryNum, avgExpensesNum, totalDeductions, bonuses, thirteenthReceivedNum, vacationThirdReceivedNum])
+  })()
+
+  const dataReady = !configLoading && result !== null
 
   return (
     <div className="space-y-6">
@@ -297,6 +246,7 @@ export function ProjectionsPage({ positions, accountsSummary, items, formatCurre
               </SheetDescription>
             </SheetHeader>
             <div className="px-4 space-y-1 overflow-y-auto flex-1">
+
               {/* Market Rates — collapsible */}
               <div className="border-b border-border pb-1">
                 <button
@@ -314,7 +264,7 @@ export function ProjectionsPage({ positions, accountsSummary, items, formatCurre
                 </button>
                 {sheetRatesOpen && (
                   <div className="pb-3 space-y-3">
-                    {ratesLoading ? (
+                    {configLoading ? (
                       <div className="space-y-3">
                         <Skeleton className="h-10 w-full" />
                         <Skeleton className="h-10 w-full" />
@@ -324,7 +274,7 @@ export function ProjectionsPage({ positions, accountsSummary, items, formatCurre
                         <div className="space-y-1.5">
                           <Label htmlFor="cdi-rate" className="text-xs text-muted-foreground">
                             CDI Annual (%)
-                            {rates && <span className="ml-1 opacity-60">— from BCB</span>}
+                            {hasRatesFromBcb && <span className="ml-1 opacity-60">— from BCB</span>}
                           </Label>
                           <Input
                             id="cdi-rate"
@@ -337,7 +287,7 @@ export function ProjectionsPage({ positions, accountsSummary, items, formatCurre
                         <div className="space-y-1.5">
                           <Label htmlFor="ipca-rate" className="text-xs text-muted-foreground">
                             IPCA Annual (%)
-                            {rates && <span className="ml-1 opacity-60">— from BCB</span>}
+                            {hasRatesFromBcb && <span className="ml-1 opacity-60">— from BCB</span>}
                           </Label>
                           <Input
                             id="ipca-rate"
@@ -467,7 +417,7 @@ export function ProjectionsPage({ positions, accountsSummary, items, formatCurre
                           <span className="ml-1 opacity-60">— from {monthsAnalyzed} months</span>
                         )}
                       </Label>
-                      {avgExpensesLoading ? (
+                      {configLoading ? (
                         <Skeleton className="h-10 w-full" />
                       ) : (
                         <Input
@@ -491,15 +441,15 @@ export function ProjectionsPage({ positions, accountsSummary, items, formatCurre
                           <span className="text-muted-foreground">IRRF</span>
                           <span className="font-semibold">{formatCurrency(regularIncome.irrf, 'BRL')}</span>
                         </div>
-                        {regularIncome.otherDeductions > 0 && (
+                        {regularIncome.other_deductions > 0 && (
                           <div className="flex justify-between">
                             <span className="text-muted-foreground">Other Deductions</span>
-                            <span className="font-semibold">{formatCurrency(regularIncome.otherDeductions, 'BRL')}</span>
+                            <span className="font-semibold">{formatCurrency(regularIncome.other_deductions, 'BRL')}</span>
                           </div>
                         )}
                         <div className="flex justify-between">
                           <span className="text-muted-foreground">Net Income</span>
-                          <span className="font-semibold">{formatCurrency(regularIncome.netIncome, 'BRL')}</span>
+                          <span className="font-semibold">{formatCurrency(regularIncome.net_income, 'BRL')}</span>
                         </div>
                         <div className="flex justify-between">
                           <span className="text-muted-foreground flex items-center gap-1">
@@ -509,7 +459,7 @@ export function ProjectionsPage({ positions, accountsSummary, items, formatCurre
                                 <Info className="h-3 w-3 text-muted-foreground/60 cursor-help" />
                               </TooltipTrigger>
                               <TooltipContent side="top" className="max-w-[220px] text-xs">
-                                Net income ({formatCurrency(regularIncome.netIncome, 'BRL')}) minus avg monthly expenses ({formatCurrency(avgExpensesNum, 'BRL')})
+                                Net income ({formatCurrency(regularIncome.net_income, 'BRL')}) minus avg monthly expenses ({formatCurrency(avgExpensesNum, 'BRL')})
                               </TooltipContent>
                             </Tooltip>
                           </span>
@@ -536,7 +486,7 @@ export function ProjectionsPage({ positions, accountsSummary, items, formatCurre
                     {!sheetBonusesOpen && (
                       <span className="ml-auto text-[11px] text-muted-foreground tabular-nums">
                         {formatCurrency(
-                          Math.max(0, bonuses.thirteenthNet - thirteenthReceivedNum) + Math.max(0, bonuses.vacationThirdNet - vacationThirdReceivedNum),
+                          Math.max(0, bonuses.thirteenth_net - thirteenthReceivedNum) + Math.max(0, bonuses.vacation_third_net - vacationThirdReceivedNum),
                           'BRL',
                         )} remaining
                       </span>
@@ -549,7 +499,7 @@ export function ProjectionsPage({ positions, accountsSummary, items, formatCurre
                       <div className="space-y-1.5">
                         <div className="flex justify-between text-xs">
                           <span className="font-medium">13th Salary</span>
-                          <span className="text-muted-foreground">Expected: {formatCurrency(bonuses.thirteenthNet, 'BRL')}</span>
+                          <span className="text-muted-foreground">Expected: {formatCurrency(bonuses.thirteenth_net, 'BRL')}</span>
                         </div>
                         <div className="space-y-1">
                           <Label htmlFor="thirteenth-received" className="text-xs text-muted-foreground">
@@ -568,17 +518,17 @@ export function ProjectionsPage({ positions, accountsSummary, items, formatCurre
                           <div className="h-1.5 flex-1 rounded-full bg-muted overflow-hidden">
                             <div
                               className="h-full rounded-full bg-emerald-500 transition-all duration-300"
-                              style={{ width: `${Math.min(100, (thirteenthReceivedNum / bonuses.thirteenthNet) * 100)}%` }}
+                              style={{ width: `${Math.min(100, (thirteenthReceivedNum / bonuses.thirteenth_net) * 100)}%` }}
                             />
                           </div>
-                          <span className="text-[11px] tabular-nums text-muted-foreground w-8 text-right">{Math.min(100, Math.round((thirteenthReceivedNum / bonuses.thirteenthNet) * 100))}%</span>
+                          <span className="text-[11px] tabular-nums text-muted-foreground w-8 text-right">{Math.min(100, Math.round((thirteenthReceivedNum / bonuses.thirteenth_net) * 100))}%</span>
                         </div>
                       </div>
                       {/* Vacation 1/3 */}
                       <div className="space-y-1.5">
                         <div className="flex justify-between text-xs">
                           <span className="font-medium">Vacation 1/3</span>
-                          <span className="text-muted-foreground">Expected: {formatCurrency(bonuses.vacationThirdNet, 'BRL')}</span>
+                          <span className="text-muted-foreground">Expected: {formatCurrency(bonuses.vacation_third_net, 'BRL')}</span>
                         </div>
                         <div className="space-y-1">
                           <Label htmlFor="vacation-received" className="text-xs text-muted-foreground">
@@ -597,10 +547,10 @@ export function ProjectionsPage({ positions, accountsSummary, items, formatCurre
                           <div className="h-1.5 flex-1 rounded-full bg-muted overflow-hidden">
                             <div
                               className="h-full rounded-full bg-emerald-500 transition-all duration-300"
-                              style={{ width: `${Math.min(100, (vacationThirdReceivedNum / bonuses.vacationThirdNet) * 100)}%` }}
+                              style={{ width: `${Math.min(100, (vacationThirdReceivedNum / bonuses.vacation_third_net) * 100)}%` }}
                             />
                           </div>
-                          <span className="text-[11px] tabular-nums text-muted-foreground w-8 text-right">{Math.min(100, Math.round((vacationThirdReceivedNum / bonuses.vacationThirdNet) * 100))}%</span>
+                          <span className="text-[11px] tabular-nums text-muted-foreground w-8 text-right">{Math.min(100, Math.round((vacationThirdReceivedNum / bonuses.vacation_third_net) * 100))}%</span>
                         </div>
                       </div>
                       {/* Total remaining summary */}
@@ -608,7 +558,7 @@ export function ProjectionsPage({ positions, accountsSummary, items, formatCurre
                         <div className="flex justify-between">
                           <span className="text-muted-foreground">Remaining for December</span>
                           <span className="font-semibold">{formatCurrency(
-                            Math.max(0, bonuses.thirteenthNet - thirteenthReceivedNum) + Math.max(0, bonuses.vacationThirdNet - vacationThirdReceivedNum),
+                            Math.max(0, bonuses.thirteenth_net - thirteenthReceivedNum) + Math.max(0, bonuses.vacation_third_net - vacationThirdReceivedNum),
                             'BRL',
                           )}</span>
                         </div>
@@ -763,7 +713,7 @@ export function ProjectionsPage({ positions, accountsSummary, items, formatCurre
         <CardContent>
           {projectionData.length > 0 ? (
             <ChartContainer config={stackedChartConfig} className="h-[350px] w-full aspect-auto">
-              <AreaChart data={projectionData} margin={{ top: 8, right: 16, bottom: 0, left: 16 }}>
+              <AreaChart data={projectionData.map(d => ({ ...d, compoundInterest: d.compound_interest }))} margin={{ top: 8, right: 16, bottom: 0, left: 16 }}>
                 <CartesianGrid vertical={false} stroke="hsl(var(--border))" strokeOpacity={0.3} />
                 <XAxis
                   dataKey="label"
@@ -912,7 +862,7 @@ export function ProjectionsPage({ positions, accountsSummary, items, formatCurre
                         <td className="text-right py-2 px-2 tabular-nums">{formatCurrency(row.gross, 'BRL')}</td>
                         <td className="text-right py-2 px-2 tabular-nums text-muted-foreground">{formatCurrency(row.inss, 'BRL')}</td>
                         <td className="text-right py-2 px-2 tabular-nums text-muted-foreground">{formatCurrency(row.irrf, 'BRL')}</td>
-                        {totalDeductions > 0 && <td className="text-right py-2 px-2 tabular-nums text-muted-foreground">{formatCurrency(row.otherDeductions, 'BRL')}</td>}
+                        {totalDeductions > 0 && <td className="text-right py-2 px-2 tabular-nums text-muted-foreground">{formatCurrency(row.other_deductions, 'BRL')}</td>}
                         <td className="text-right py-2 px-2 tabular-nums font-semibold">{formatCurrency(row.net, 'BRL')}</td>
                         <td className="py-2 pl-4 text-amber-500">{row.note}</td>
                       </tr>
@@ -926,15 +876,8 @@ export function ProjectionsPage({ positions, accountsSummary, items, formatCurre
       )}
 
       <DebugPanel sections={[
-        { label: 'accountsSummary', data: accountsSummary },
-        { label: 'accountsBalance', data: accountsBalance },
-        { label: 'positions', data: positions },
-        { label: 'currentTotal (net worth)', data: { currentTotal, breakdown: { savings: projectionData[0]?.savings, investments: projectionData[0]?.investments } } },
-        { label: 'projectionData', data: projectionData },
-        { label: 'rates', data: { cdiAnnual, ipcaAnnual, rawRates: rates } },
-        { label: 'income & expenses', data: { grossSalary: grossSalaryNum, avgExpenses: avgExpensesNum, monthlySurplus, regularIncome } },
+        { label: 'result', data: result },
         { label: 'growthAttribution', data: growthAttribution },
-        { label: 'items', data: items },
       ]} />
       </>
       )}

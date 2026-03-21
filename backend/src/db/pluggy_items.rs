@@ -4,7 +4,7 @@ use uuid::Uuid;
 
 use crate::error::AppError;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PluggyItem {
     pub id: String,
     pub user_id: String,

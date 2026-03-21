@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { PieChart, Pie, Cell, ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid } from 'recharts'
 import { Activity, PlusCircle, DollarSign, AlertCircle, LogOut, BarChart3, Wallet, CalendarClock, CheckCircle2, TrendingDown, TrendingUp } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -8,7 +8,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ChartContainer, ChartTooltip, type ChartConfig } from '@/components/ui/chart'
 import { INVESTMENT_TYPE_LABELS, INVESTMENT_TYPE_COLORS } from '@/constants/investments'
-import type { AccountsSummary, ConnectedItem, HealthStatus, InvestmentsSummary, InvestmentPosition, CreditCardAccount, BillingCycle } from '@/types'
+import * as api from '@/lib/api'
 import { DebugPanel } from './DebugPanel'
 
 function getGreeting() {
@@ -19,150 +19,61 @@ function getGreeting() {
 }
 
 interface DashboardPageProps {
-  health: HealthStatus | null
-  loading: boolean
-  accountsSummary: AccountsSummary | null
-  accountsLoading: boolean
-  accountsError: string | null
-  investmentsSummary: InvestmentsSummary | null
-  investmentsLoading: boolean
-  investmentsError: string | null
-  manualTotal: number
-  error: string | null
-  items: ConnectedItem[]
+  items: { id: string; name: string }[]
   formatCurrency: (value: number, currency: string) => string
   onConnectBank: () => void
   onDisconnectAll: () => void
-  onRetryAccounts: () => void
-  onRetryInvestments: () => void
-  allPositions: InvestmentPosition[]
-  creditCards: CreditCardAccount[]
-  billingCycles: BillingCycle[]
-  billingCyclesLoading: boolean
 }
 
 export function DashboardPage({
-  health,
-  loading,
-  accountsSummary,
-  accountsLoading,
-  accountsError,
-  investmentsSummary,
-  investmentsLoading,
-  investmentsError,
-  manualTotal,
-  error,
   items,
   formatCurrency,
   onConnectBank,
   onDisconnectAll,
-  onRetryAccounts,
-  onRetryInvestments,
-  allPositions,
-  creditCards,
-  billingCycles,
-  billingCyclesLoading,
 }: DashboardPageProps) {
-  // ── Net Worth composition bar data ────────────────────────────────────
-  const compositionData = useMemo(() => {
-    const accountsTotal = accountsSummary?.total_balance ?? 0
-    const investmentsTotal = (investmentsSummary?.total_gross_amount ?? 0) + manualTotal
-    const total = accountsTotal + investmentsTotal
-    if (total <= 0) return null
+  const [data, setData] = useState<api.BffDashboardResponse | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
-    const typeGroups: { type: string; amount: number; color: string }[] = []
-
-    if (accountsTotal > 0) {
-      typeGroups.push({ type: 'Accounts', amount: accountsTotal, color: 'hsl(var(--primary))' })
+  const fetchData = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const res = await api.getDashboard()
+      setData(res)
+    } catch (err) {
+      if (err instanceof api.UnauthorizedError) return
+      setError(err instanceof Error ? err.message : 'Failed to load dashboard')
+    } finally {
+      setLoading(false)
     }
+  }, [])
 
-    const grouped = allPositions.reduce((acc, p) => {
-      acc[p.investment_type] = (acc[p.investment_type] ?? 0) + p.amount
-      return acc
-    }, {} as Record<string, number>)
+  useEffect(() => {
+    fetchData()
+  }, [fetchData])
 
-    Object.entries(grouped)
-      .sort((a, b) => b[1] - a[1])
-      .forEach(([type, amount]) => {
-        typeGroups.push({
-          type: INVESTMENT_TYPE_LABELS[type]?.label ?? type,
-          amount,
-          color: INVESTMENT_TYPE_COLORS[type] ?? INVESTMENT_TYPE_COLORS.OTHER,
-        })
-      })
-
-    return { total, segments: typeGroups }
-  }, [accountsSummary, investmentsSummary, manualTotal, allPositions])
-
-  // ── Portfolio allocation pie data ─────────────────────────────────────
-  const pieData = useMemo(() => {
-    if (allPositions.length === 0) return null
-    const grouped = allPositions.reduce((acc, p) => {
-      acc[p.investment_type] = (acc[p.investment_type] ?? 0) + p.amount
-      return acc
-    }, {} as Record<string, number>)
-    const entries = Object.entries(grouped)
-      .map(([type, value]) => ({ name: type, value }))
-      .sort((a, b) => b.value - a.value)
-    const total = entries.reduce((s, d) => s + d.value, 0)
-    return { entries, total }
-  }, [allPositions])
-
-  // ── Attention items ───────────────────────────────────────────────────
-  const attentionItems = useMemo(() => {
-    const items: { id: string; label: string; amount: number; urgency: 'amber' | 'red'; detail: string }[] = []
-    const now = new Date()
-    now.setHours(0, 0, 0, 0)
-    const in90Days = new Date(now)
-    in90Days.setDate(in90Days.getDate() + 60)
-
-    // Maturing positions
-    for (const pos of allPositions) {
-      if (!pos.due_date) continue
-      const due = new Date(pos.due_date)
-      due.setHours(0, 0, 0, 0)
-      if (due <= in90Days) {
-        const daysLeft = Math.ceil((due.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
-        items.push({
-          id: pos.id,
-          label: pos.name,
-          amount: pos.amount,
-          urgency: daysLeft <= 0 ? 'red' : 'amber',
-          detail: daysLeft <= 0 ? 'Matured' : `${daysLeft}d to maturity`,
-        })
+  const spendingTrendData = data?.spending_trend
+    ? {
+        data: data.spending_trend.data_points,
+        current: data.spending_trend.data_points[data.spending_trend.data_points.length - 1],
+        previous: data.spending_trend.data_points[data.spending_trend.data_points.length - 2],
+        change: data.spending_trend.change_percentage,
       }
-    }
+    : null
 
-    // Sort: red first, then by urgency detail
-    items.sort((a, b) => {
-      if (a.urgency !== b.urgency) return a.urgency === 'red' ? -1 : 1
-      return 0
-    })
-
-    return items.slice(0, 5)
-  }, [allPositions])
-
-  // ── Spending trend data ───────────────────────────────────────────────
-  const spendingTrendData = useMemo(() => {
-    if (billingCycles.length < 2) return null
-    const sorted = [...billingCycles].sort((a, b) => a.key.localeCompare(b.key))
-    const data = sorted.map(c => ({
-      label: c.label,
-      total: Math.abs(c.total),
-    }))
-    const current = data[data.length - 1]
-    const previous = data[data.length - 2]
-    const change = previous.total > 0
-      ? ((current.total - previous.total) / previous.total) * 100
-      : null
-    return { data, current, previous, change }
-  }, [billingCycles])
+  const pieData = data?.allocation
+    ? {
+        entries: data.allocation.entries.map(e => ({ name: e.type_key, value: e.amount })),
+        total: data.allocation.total,
+      }
+    : null
 
   const spendingChartConfig: ChartConfig = {
     total: { label: 'Spending', color: 'hsl(var(--primary))' },
   }
 
-  const dataLoading = accountsLoading || investmentsLoading
+  const dataReady = !loading && data !== null
 
   return (
     <>
@@ -192,36 +103,120 @@ export function DashboardPage({
           <Alert variant="destructive">
             <AlertCircle className="h-4 w-4" />
             <AlertTitle>Error</AlertTitle>
-            <AlertDescription>{error}</AlertDescription>
+            <AlertDescription>
+              {error}
+              <Button variant="outline" size="sm" className="ml-4 mt-2" onClick={fetchData}>
+                Retry
+              </Button>
+            </AlertDescription>
           </Alert>
         )}
 
-        {accountsError && (
+        {data?.errors.accounts && (
           <Alert variant="destructive">
             <AlertCircle className="h-4 w-4" />
             <AlertTitle>Sync Error</AlertTitle>
             <AlertDescription>
-              {accountsError}
-              <Button variant="outline" size="sm" className="ml-4 mt-2" onClick={onRetryAccounts}>
+              {data.errors.accounts}
+              <Button variant="outline" size="sm" className="ml-4 mt-2" onClick={fetchData}>
                 Retry Sync
               </Button>
             </AlertDescription>
           </Alert>
         )}
 
-        {investmentsError && (
+        {data?.errors.investments && (
           <Alert variant="destructive">
             <AlertCircle className="h-4 w-4" />
             <AlertTitle>Investments Sync Error</AlertTitle>
             <AlertDescription>
-              {investmentsError}
-              <Button variant="outline" size="sm" className="ml-4 mt-2" onClick={onRetryInvestments}>
+              {data.errors.investments}
+              <Button variant="outline" size="sm" className="ml-4 mt-2" onClick={fetchData}>
                 Retry Sync
               </Button>
             </AlertDescription>
           </Alert>
         )}
 
+        {!dataReady ? (
+          <>
+            {/* Skeleton Net Worth hero */}
+            <Card
+              className="overflow-hidden shimmer opacity-0 border-primary/20"
+              style={{ animation: 'rise-in 0.5s ease-out 0s forwards' }}
+            >
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 pt-4 px-6">
+                <Skeleton className="h-3 w-20 rounded" />
+                <Skeleton className="h-9 w-9 rounded-xl" />
+              </CardHeader>
+              <CardContent className="px-6 pb-5 space-y-2">
+                <Skeleton className="h-9 w-48 rounded" />
+                <Skeleton className="h-3 w-56 rounded" />
+                <Skeleton className="h-2 w-full rounded-full mt-3" />
+              </CardContent>
+            </Card>
+
+            {/* Skeleton KPI grid */}
+            <div className="grid gap-4 md:grid-cols-3">
+              {[0, 1, 2].map((i) => (
+                <Card
+                  key={i}
+                  className="overflow-hidden shimmer opacity-0"
+                  style={{ animation: `rise-in 0.5s ease-out ${0.12 + i * 0.12}s forwards` }}
+                >
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 pt-2.5 px-4">
+                    <Skeleton className="h-3 w-24 rounded" />
+                    <Skeleton className="h-9 w-9 rounded-xl" />
+                  </CardHeader>
+                  <CardContent className="px-4 pb-3 space-y-2">
+                    <Skeleton className="h-7 w-32 rounded" />
+                    <Skeleton className="h-3 w-20 rounded" />
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+
+            {/* Skeleton charts row */}
+            <div className="grid gap-4 md:grid-cols-2">
+              <Card
+                className="overflow-hidden shimmer opacity-0"
+                style={{ animation: 'rise-in 0.5s ease-out 0.48s forwards' }}
+              >
+                <CardHeader className="px-5 pt-5 pb-3">
+                  <Skeleton className="h-5 w-40 rounded" />
+                  <Skeleton className="h-3 w-56 rounded mt-1" />
+                </CardHeader>
+                <CardContent className="px-5 pb-5 flex items-center justify-center">
+                  <Skeleton className="h-[180px] w-[180px] rounded-full" />
+                </CardContent>
+              </Card>
+              <Card
+                className="overflow-hidden shimmer opacity-0"
+                style={{ animation: 'rise-in 0.5s ease-out 0.6s forwards' }}
+              >
+                <CardHeader className="px-5 pt-5 pb-2">
+                  <Skeleton className="h-5 w-36 rounded" />
+                  <Skeleton className="h-3 w-52 rounded mt-1" />
+                </CardHeader>
+                <CardContent className="px-5 pb-5">
+                  <div className="h-[180px] flex items-end gap-[3%] px-4 pb-6 pt-4">
+                    {[0.5, 0.7, 0.6, 0.8, 0.9, 0.75].map((h, i) => (
+                      <div
+                        key={i}
+                        className="flex-1 origin-bottom rounded-t bg-muted"
+                        style={{
+                          height: `${h * 100}%`,
+                          animation: `chart-grow 0.6s ease-out ${0.7 + i * 0.06}s both`,
+                        }}
+                      />
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </>
+        ) : (
+        <>
         {/* ── Section 2: Net Worth Hero Card with Composition Bar ─────── */}
         <Card className="overflow-hidden group transition-shadow hover:shadow-lg hover:shadow-black/30 border-primary/20">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 pt-4 px-6">
@@ -232,37 +227,33 @@ export function DashboardPage({
           </CardHeader>
           <CardContent className="px-6 pb-5">
             <div className="text-3xl font-bold font-heading tracking-tight text-gradient">
-              {dataLoading ? (
-                <Skeleton className="h-9 w-48 bg-secondary" />
-              ) : (
-                formatCurrency(
-                  (accountsSummary?.total_balance ?? 0) + (investmentsSummary?.total_gross_amount ?? 0) + manualTotal,
-                  accountsSummary?.currency_code ?? investmentsSummary?.currency_code ?? 'BRL'
-                )
+              {formatCurrency(
+                data?.net_worth.total ?? 0,
+                data?.net_worth.currency_code ?? 'BRL'
               )}
             </div>
             <p className="text-xs text-muted-foreground mt-1.5 flex items-center gap-3">
               <span className="flex items-center gap-1">
                 <DollarSign className="h-3 w-3" />
-                Accounts: {accountsSummary ? formatCurrency(accountsSummary.total_balance, accountsSummary.currency_code) : 'R$ 0,00'}
+                Accounts: {data?.accounts ? formatCurrency(data.accounts.total_balance, data.accounts.currency_code) : 'R$ 0,00'}
               </span>
               <span className="text-border">·</span>
               <span className="flex items-center gap-1">
                 <BarChart3 className="h-3 w-3" />
-                Investments: {formatCurrency((investmentsSummary?.total_gross_amount ?? 0) + manualTotal, investmentsSummary?.currency_code ?? 'BRL')}
+                Investments: {formatCurrency(data?.net_worth.investments_total ?? 0, data?.investments?.currency_code ?? 'BRL')}
               </span>
             </p>
 
             {/* Composition bar */}
-            {!dataLoading && compositionData && (
+            {data?.composition && (
               <div className="mt-4 space-y-2">
                 <div className="flex h-2 rounded-full overflow-hidden bg-secondary">
-                  {compositionData.segments.map((seg) => (
+                  {data.composition.segments.map((seg) => (
                     <div
-                      key={seg.type}
+                      key={seg.type_key}
                       className="h-full first:rounded-l-full last:rounded-r-full"
                       style={{
-                        width: `${(seg.amount / compositionData.total) * 100}%`,
+                        width: `${(seg.amount / data.composition!.total) * 100}%`,
                         backgroundColor: seg.color,
                         opacity: 0.85,
                       }}
@@ -270,11 +261,11 @@ export function DashboardPage({
                   ))}
                 </div>
                 <div className="flex flex-wrap gap-x-4 gap-y-1">
-                  {compositionData.segments.map((seg) => (
-                    <div key={seg.type} className="flex items-center gap-1.5">
+                  {data.composition.segments.map((seg) => (
+                    <div key={seg.type_key} className="flex items-center gap-1.5">
                       <span className="h-1.5 w-1.5 rounded-full shrink-0" style={{ backgroundColor: seg.color, opacity: 0.85 }} />
                       <span className="text-[10px] text-muted-foreground">
-                        {seg.type} {((seg.amount / compositionData.total) * 100).toFixed(0)}%
+                        {seg.label} {seg.percentage.toFixed(0)}%
                       </span>
                     </div>
                   ))}
@@ -295,10 +286,8 @@ export function DashboardPage({
             </CardHeader>
             <CardContent className="px-4 pb-3">
               <div className="text-2xl font-bold font-heading tracking-tight text-gradient">
-                {accountsLoading ? (
-                  <Skeleton className="h-8 w-32 bg-secondary" />
-                ) : accountsSummary ? (
-                  formatCurrency(accountsSummary.total_balance, accountsSummary.currency_code)
+                {data?.accounts ? (
+                  formatCurrency(data.accounts.total_balance, data.accounts.currency_code)
                 ) : (
                   'R$ 0,00'
                 )}
@@ -319,10 +308,8 @@ export function DashboardPage({
             </CardHeader>
             <CardContent className="px-4 pb-3">
               <div className="text-2xl font-bold font-heading tracking-tight text-gradient">
-                {investmentsLoading ? (
-                  <Skeleton className="h-8 w-32 bg-secondary" />
-                ) : (investmentsSummary || manualTotal > 0) ? (
-                  formatCurrency((investmentsSummary?.total_gross_amount ?? 0) + manualTotal, investmentsSummary?.currency_code ?? 'BRL')
+                {data?.investments ? (
+                  formatCurrency(data.investments.total_gross_amount, data.investments.currency_code)
                 ) : (
                   'R$ 0,00'
                 )}
@@ -331,7 +318,7 @@ export function DashboardPage({
                 <Activity className="h-3 w-3 text-violet-400" />
                 {items.length === 0
                   ? 'Connect an account to see investments'
-                  : `${investmentsSummary?.investment_count ?? 0} position${(investmentsSummary?.investment_count ?? 0) !== 1 ? 's' : ''}`}
+                  : `${data?.investments?.investment_count ?? 0} position${(data?.investments?.investment_count ?? 0) !== 1 ? 's' : ''}`}
               </p>
             </CardContent>
           </Card>
@@ -345,14 +332,14 @@ export function DashboardPage({
               </div>
             </CardHeader>
             <CardContent className="px-4 pb-3">
-              {attentionItems.length === 0 ? (
+              {(data?.attention_items.length ?? 0) === 0 ? (
                 <div className="flex items-center gap-2 py-1">
                   <CheckCircle2 className="h-4 w-4 text-green-500/60" />
                   <p className="text-xs text-muted-foreground/60">All clear</p>
                 </div>
               ) : (
                 <div className="space-y-1.5">
-                  {attentionItems.slice(0, 4).map((item) => (
+                  {data!.attention_items.slice(0, 4).map((item) => (
                     <div
                       key={item.id}
                       className={`flex items-center gap-2 rounded border-l-2 pl-2 ${
@@ -374,8 +361,8 @@ export function DashboardPage({
                       </Badge>
                     </div>
                   ))}
-                  {attentionItems.length > 4 && (
-                    <p className="text-[10px] text-muted-foreground/60">+{attentionItems.length - 4} more</p>
+                  {data!.attention_items.length > 4 && (
+                    <p className="text-[10px] text-muted-foreground/60">+{data!.attention_items.length - 4} more</p>
                   )}
                 </div>
               )}
@@ -473,9 +460,7 @@ export function DashboardPage({
             </div>
           </CardHeader>
           <CardContent className="px-5 pb-5">
-            {billingCyclesLoading ? (
-              <Skeleton className="h-[180px] w-full bg-secondary" />
-            ) : spendingTrendData ? (
+            {spendingTrendData ? (
               <div className="space-y-3">
                 <ChartContainer config={spendingChartConfig} className="h-[180px] w-full aspect-auto">
                   <AreaChart data={spendingTrendData.data} margin={{ top: 8, right: 16, bottom: 0, left: 16 }}>
@@ -544,24 +529,13 @@ export function DashboardPage({
           </CardContent>
         </Card>
         </div>
+        </>
+        )}
       </div>
 
       <DebugPanel sections={[
-        { label: 'accountsSummary', data: accountsSummary },
-        { label: 'investmentsSummary', data: investmentsSummary },
-        { label: 'manualTotal', data: manualTotal },
-        { label: 'net worth calculation', data: {
-          accounts: accountsSummary?.total_balance ?? 0,
-          investments: investmentsSummary?.total_gross_amount ?? 0,
-          manual: manualTotal,
-          total: (accountsSummary?.total_balance ?? 0) + (investmentsSummary?.total_gross_amount ?? 0) + manualTotal,
-        }},
-        { label: 'creditCards', data: creditCards },
-        { label: 'allPositions', data: allPositions },
-        { label: 'billingCycles', data: billingCycles },
-        { label: 'attentionItems', data: attentionItems },
-        { label: 'health', data: health },
-        { label: 'items', data: items },
+        { label: 'dashboardData', data: data },
+        { label: 'error', data: error },
       ]} />
     </>
   )

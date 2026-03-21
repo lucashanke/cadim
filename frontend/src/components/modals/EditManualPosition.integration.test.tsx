@@ -21,8 +21,61 @@ const seedPosition = {
 
 function seedManualPosition() {
   server.use(
-    http.get('/api/positions', () =>
-      HttpResponse.json([seedPosition])
+    http.get('/api/bff/bootstrap', () =>
+      HttpResponse.json({
+        user: { id: 'test-user-id', email: 'test@example.com' },
+        items: [],
+        manual_positions: [{
+          id: seedPosition.id,
+          investment_type: seedPosition.investment_type,
+          subtype: seedPosition.subtype,
+          amount: seedPosition.amount,
+          due_date: seedPosition.due_date,
+        }],
+        has_compensation_config: false,
+      })
+    ),
+    http.get('/api/bff/investments', () =>
+      HttpResponse.json({
+        positions: [{
+          id: seedPosition.id,
+          name: 'CDB',
+          investment_type: seedPosition.investment_type,
+          type_label: 'Fixed Income',
+          type_color: '#e09020',
+          subtype: seedPosition.subtype,
+          subtype_label: 'CDB',
+          amount: seedPosition.amount,
+          currency_code: 'BRL',
+          date: null,
+          due_date: seedPosition.due_date,
+          rate: null,
+          rate_type: null,
+          fixed_annual_rate: null,
+          rate_display: '—',
+          is_manual: true,
+        }],
+        kpis: {
+          total_portfolio: seedPosition.amount,
+          fixed_income: seedPosition.amount,
+          fixed_income_pct: 100,
+          variable_income: 0,
+          variable_income_pct: 0,
+          manual_total: seedPosition.amount,
+          manual_count: 1,
+          position_count: 1,
+        },
+        allocation: [{
+          type_key: 'FIXED_INCOME',
+          label: 'Fixed Income',
+          amount: seedPosition.amount,
+          percentage: 100,
+          color: '#e09020',
+          subtypes: [{ subtype_key: 'CDB', label: 'CDB', amount: seedPosition.amount, percentage: 100 }],
+        }],
+        maturity_groups: [{ label: 'No due date', total: seedPosition.amount, count: 1, percentage: 100 }],
+        errors: { positions: null },
+      })
     )
   )
 }

@@ -11,14 +11,6 @@ use crate::db::positions::{self, CreatePosition, UpdatePosition};
 use crate::error::AppError;
 use crate::state::AppState;
 
-pub async fn list(
-    auth: AuthUser,
-    State(state): State<Arc<AppState>>,
-) -> Result<Json<Vec<positions::Position>>, AppError> {
-    let positions = positions::list_positions(&state.db, &auth.id, &auth.encryption_key).await?;
-    Ok(Json(positions))
-}
-
 pub async fn create(
     auth: AuthUser,
     State(state): State<Arc<AppState>>,

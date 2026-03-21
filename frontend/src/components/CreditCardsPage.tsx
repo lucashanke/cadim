@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { BarChart, Bar, XAxis, YAxis, Cell, AreaChart, Area, CartesianGrid } from 'recharts'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -18,7 +18,8 @@ import {
   Tag, Ticket, TrendingDown, TrendingUp, Utensils, Wrench, Zap,
   type LucideIcon,
 } from 'lucide-react'
-import type { ConnectedItem, CreditCardAccount, TransactionItem, BillingCycle, CategoryTotal } from '@/types'
+import * as api from '@/lib/api'
+import type { CreditCardAccount, TransactionItem, BillingCycle, CategoryTotal } from '@/types'
 import { DebugPanel } from './DebugPanel'
 
 const CATEGORY_COLORS: Record<string, { bg: string; text: string; border: string }> = {
@@ -596,31 +597,42 @@ function CategoryBreakdownView({
 // ── Main component ─────────────────────────────────────────────────────────────
 
 interface CreditCardsPageProps {
-  items: ConnectedItem[]
-  creditCards: CreditCardAccount[]
-  loading: boolean
-  error: string | null
-  onRetry: () => void
   formatCurrency: (value: number, currency: string) => string
-  billingCycles: BillingCycle[]
-  billingCyclesLoading: boolean
 }
 
 export function CreditCardsPage({
-  items,
-  creditCards,
-  loading,
-  error,
-  onRetry,
   formatCurrency,
-  billingCycles: cycles,
-  billingCyclesLoading: transactionsLoading,
 }: CreditCardsPageProps) {
+  const [creditCards, setCreditCards] = useState<CreditCardAccount[]>([])
+  const [cycles, setCycles] = useState<BillingCycle[]>([])
+  const [loading, setLoading] = useState(true)
+
+  const [error, setError] = useState<string | null>(null)
+
+  const fetchData = useCallback(async () => {
+    setLoading(true)
+
+    setError(null)
+    try {
+      const data = await api.getCreditCards()
+      setCreditCards(data.credit_cards)
+      setCycles(data.billing_cycles)
+      if (data.errors.credit_cards) setError(data.errors.credit_cards)
+      if (data.errors.billing_cycles) setError(prev => prev ?? data.errors.billing_cycles)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unknown error')
+    } finally {
+      setLoading(false)
+
+    }
+  }, [])
+
+  useEffect(() => { fetchData() }, [fetchData])
   const [selectedCycle, setSelectedCycle] = useState<string>('')
   const [selectedCard, setSelectedCard] = useState<string | null>(null)
   const [activeView, setActiveView] = useState<'transactions' | 'breakdown'>('transactions')
   const [searchQuery, setSearchQuery] = useState('')
-  const transactionsError: string | null = null
+
 
   const currentCycleKey = new Date().toISOString().slice(0, 7)
 
@@ -669,7 +681,7 @@ export function CreditCardsPage({
           <p className="text-sm text-muted-foreground mt-1">Monitor spending patterns and billing cycles across your credit cards</p>
         </div>
         <div className="flex items-center gap-3">
-          {!transactionsLoading && cycles.length >= 2 && (
+          {!loading && cycles.length >= 2 && (
             <SpendingHistoryChart cycles={cycles} formatCurrency={formatCurrency} />
           )}
           {creditCards.length > 0 && (
@@ -689,13 +701,53 @@ export function CreditCardsPage({
           <AlertTitle>Error</AlertTitle>
           <AlertDescription>
             {error}
-            <Button variant="outline" size="sm" className="ml-4 mt-2" onClick={onRetry}>
+            <Button variant="outline" size="sm" className="ml-4 mt-2" onClick={fetchData}>
               Retry
             </Button>
           </AlertDescription>
         </Alert>
       )}
 
+      {loading ? (
+        <>
+          {/* Skeleton KPI cards with staggered rise-in + shimmer */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {[0, 1, 2, 3].map((i) => (
+              <Card
+                key={i}
+                className="overflow-hidden shimmer opacity-0"
+                style={{ animation: `rise-in 0.5s ease-out ${i * 0.12}s forwards` }}
+              >
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 pt-2.5 px-4">
+                  <Skeleton className="h-3 w-24 rounded" />
+                  <Skeleton className="h-9 w-9 rounded-xl" />
+                </CardHeader>
+                <CardContent className="px-4 pb-3 space-y-2">
+                  <Skeleton className="h-7 w-32 rounded" />
+                  <Skeleton className="h-3 w-20 rounded" />
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+
+          {/* Skeleton content card */}
+          <Card
+            className="overflow-hidden shimmer opacity-0"
+            style={{ animation: 'rise-in 0.5s ease-out 0.48s forwards' }}
+          >
+            <CardContent className="px-5 py-5 space-y-3">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <Skeleton
+                  key={i}
+                  className="h-10 w-full rounded opacity-0"
+                  style={{ animation: `rise-in 0.4s ease-out ${0.6 + i * 0.08}s forwards` }}
+                />
+              ))}
+            </CardContent>
+          </Card>
+        </>
+      ) : (
+      <>
       {kpiData && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <Card className="overflow-hidden group transition-shadow hover:shadow-lg hover:shadow-black/30">
@@ -751,26 +803,12 @@ export function CreditCardsPage({
 
       <Card>
         <CardContent className="px-0 pb-0">
-          {items.length === 0 ? (
+          {creditCards.length === 0 && cycles.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 text-center space-y-3">
               <CreditCard className="h-12 w-12 text-muted-foreground/25" />
               <p className="text-sm text-muted-foreground/60 max-w-[240px] leading-relaxed">
                 Connect a bank to see credit cards
               </p>
-            </div>
-          ) : loading || transactionsLoading ? (
-            <div className="px-5 py-5 space-y-3">
-              {Array.from({ length: 5 }).map((_, i) => (
-                <Skeleton key={i} className="h-10 w-full bg-secondary" />
-              ))}
-            </div>
-          ) : transactionsError ? (
-            <div className="px-5 pt-5 pb-3">
-              <Alert variant="destructive">
-                <AlertCircle className="h-4 w-4" />
-                <AlertTitle>Error</AlertTitle>
-                <AlertDescription>{transactionsError}</AlertDescription>
-              </Alert>
             </div>
           ) : cycles.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 text-center space-y-2">
@@ -943,13 +981,14 @@ export function CreditCardsPage({
           )}
         </CardContent>
       </Card>
+      </>)}
 
       <DebugPanel sections={[
         { label: 'creditCards', data: creditCards },
         { label: 'cycles', data: cycles },
         { label: 'selectedCycle', data: selectedCycle },
         { label: 'selectedCard', data: selectedCard },
-        { label: 'items', data: items },
+        { label: 'error', data: error },
       ]} />
     </div>
   )

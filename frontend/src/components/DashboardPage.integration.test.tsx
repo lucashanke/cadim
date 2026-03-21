@@ -13,13 +13,31 @@ vi.mock('react-pluggy-connect', () => ({
 
 function seedItem() {
   server.use(
-    http.get('/api/pluggy-items', () =>
-      HttpResponse.json([{
-        id: 'internal-id',
-        user_id: 'test-user-id',
-        pluggy_item_id: ITEM_ID,
-        connector_name: 'Nubank',
-      }])
+    http.get('/api/bff/bootstrap', () =>
+      HttpResponse.json({
+        user: { id: 'test-user-id', email: 'test@example.com' },
+        items: [{ id: ITEM_ID, name: 'Nubank' }],
+        manual_positions: [],
+        has_compensation_config: false,
+      })
+    )
+  )
+}
+
+function seedDashboard(overrides: Record<string, unknown> = {}) {
+  server.use(
+    http.get('/api/bff/dashboard', () =>
+      HttpResponse.json({
+        net_worth: { total: 7500, accounts_balance: 2500, investments_total: 5000, currency_code: 'BRL' },
+        accounts: { total_balance: 2500, account_count: 2, currency_code: 'BRL' },
+        investments: { total_gross_amount: 5000, investment_count: 3, currency_code: 'BRL' },
+        composition: null,
+        allocation: null,
+        attention_items: [],
+        spending_trend: null,
+        errors: { accounts: null, investments: null, credit_cards: null, billing_cycles: null },
+        ...overrides,
+      })
     )
   )
 }
@@ -27,6 +45,7 @@ function seedItem() {
 describe('DashboardPage integration', () => {
   it('renders formatted account and investment values after loading', async () => {
     seedItem()
+    seedDashboard()
     renderWithRouter(<App />)
 
     // R$ 2.500,00 for accounts, R$ 5.000,00 for investments
@@ -40,11 +59,9 @@ describe('DashboardPage integration', () => {
 
   it('shows accounts sync error alert with Retry Sync button', async () => {
     seedItem()
-    server.use(
-      http.get('/api/accounts/summary', () =>
-        HttpResponse.json({ error: 'Pluggy error' }, { status: 502 })
-      )
-    )
+    seedDashboard({
+      errors: { accounts: 'Pluggy error', investments: null, credit_cards: null, billing_cycles: null },
+    })
 
     renderWithRouter(<App />)
 
@@ -59,20 +76,38 @@ describe('DashboardPage integration', () => {
     let callCount = 0
 
     server.use(
-      http.get('/api/accounts/summary', () => {
+      http.get('/api/bff/dashboard', () => {
         callCount++
         if (callCount === 1) {
-          return HttpResponse.json({ error: 'first attempt failed' }, { status: 502 })
+          return HttpResponse.json({
+            net_worth: { total: 0, accounts_balance: 0, investments_total: 0, currency_code: 'BRL' },
+            accounts: null,
+            investments: null,
+            composition: null,
+            allocation: null,
+            attention_items: [],
+            spending_trend: null,
+            errors: { accounts: 'first attempt failed', investments: null, credit_cards: null, billing_cycles: null },
+          })
         }
-        return HttpResponse.json({ total_balance: 1000, currency_code: 'BRL', account_count: 1 })
+        return HttpResponse.json({
+          net_worth: { total: 1000, accounts_balance: 1000, investments_total: 0, currency_code: 'BRL' },
+          accounts: { total_balance: 1000, account_count: 1, currency_code: 'BRL' },
+          investments: null,
+          composition: null,
+          allocation: null,
+          attention_items: [],
+          spending_trend: null,
+          errors: { accounts: null, investments: null, credit_cards: null, billing_cycles: null },
+        })
       })
     )
 
     const user = userEvent.setup()
     renderWithRouter(<App />)
 
-    await waitFor(() => screen.getByRole('button', { name: /retry sync/i }))
-    await user.click(screen.getByRole('button', { name: /retry sync/i }))
+    await waitFor(() => screen.getByRole('button', { name: /retry/i }))
+    await user.click(screen.getByRole('button', { name: /retry/i }))
 
     await waitFor(() => {
       expect(callCount).toBeGreaterThanOrEqual(2)
@@ -81,11 +116,9 @@ describe('DashboardPage integration', () => {
 
   it('shows investments sync error alert with Retry Sync button', async () => {
     seedItem()
-    server.use(
-      http.get('/api/investments/summary', () =>
-        HttpResponse.json({ error: 'Pluggy error' }, { status: 502 })
-      )
-    )
+    seedDashboard({
+      errors: { accounts: null, investments: 'Pluggy error', credit_cards: null, billing_cycles: null },
+    })
 
     renderWithRouter(<App />)
 

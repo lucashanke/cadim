@@ -6,14 +6,6 @@ use crate::db::compensation::{self, CompensationConfig};
 use crate::error::AppError;
 use crate::state::AppState;
 
-pub async fn get_config(
-    auth: AuthUser,
-    State(state): State<Arc<AppState>>,
-) -> Result<Json<Option<CompensationConfig>>, AppError> {
-    let config = compensation::get_config(&state.db, &auth.id, &auth.encryption_key).await?;
-    Ok(Json(config))
-}
-
 pub async fn upsert_config(
     auth: AuthUser,
     State(state): State<Arc<AppState>>,
