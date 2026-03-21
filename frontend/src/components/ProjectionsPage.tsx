@@ -7,7 +7,8 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { ChartContainer, ChartTooltip, type ChartConfig } from '@/components/ui/chart'
 import { Sheet, SheetTrigger, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet'
 import { Button } from '@/components/ui/button'
-import { TrendingUp, Percent, Wallet, PiggyBank, ChevronDown, ChevronRight, SlidersHorizontal, Plus, X, Gift } from 'lucide-react'
+import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
+import { TrendingUp, Percent, Wallet, PiggyBank, ChevronDown, ChevronRight, SlidersHorizontal, Plus, X, Gift, Info } from 'lucide-react'
 import { projectNetWorth } from '@/lib/projections'
 import { calculateMonthlyIncome, calculateAnnualBonuses } from '@/lib/clt-taxes'
 import { getSalaryConfig, saveSalaryConfig, type SalaryDeduction } from '@/lib/storage'
@@ -85,7 +86,14 @@ export function ProjectionsPage({ positions, accountsSummary, items, formatCurre
   const [avgExpenses, setAvgExpenses] = useState<string>('')
   const [avgExpensesLoading, setAvgExpensesLoading] = useState(false)
   const [monthsAnalyzed, setMonthsAnalyzed] = useState<number>(0)
+  const [compoundSavings, setCompoundSavings] = useState<boolean>(() => {
+    const saved = getSalaryConfig()
+    return saved?.compoundSavings ?? false
+  })
   const [showIncomeSchedule, setShowIncomeSchedule] = useState(false)
+  const [sheetRatesOpen, setSheetRatesOpen] = useState(true)
+  const [sheetIncomeOpen, setSheetIncomeOpen] = useState(true)
+  const [sheetBonusesOpen, setSheetBonusesOpen] = useState(true)
 
   useEffect(() => {
     async function fetchRates() {
@@ -135,9 +143,10 @@ export function ProjectionsPage({ positions, accountsSummary, items, formatCurre
         thirteenthReceived: parseFloat(thirteenthReceived) || 0,
         vacationThirdReceived: parseFloat(vacationThirdReceived) || 0,
         bonusYear: new Date().getFullYear(),
+        compoundSavings,
       })
     }
-  }, [grossSalary, deductions, thirteenthReceived, vacationThirdReceived])
+  }, [grossSalary, deductions, thirteenthReceived, vacationThirdReceived, compoundSavings])
 
   const cdiAnnual = parseFloat(cdiOverride) || 0
   const ipcaAnnual = parseFloat(ipcaOverride) || 0
@@ -165,8 +174,9 @@ export function ProjectionsPage({ positions, accountsSummary, items, formatCurre
         otherDeductions: totalDeductions,
         thirteenthReceived: thirteenthReceivedNum,
         vacationThirdReceived: vacationThirdReceivedNum,
+        compoundSavings,
       }),
-    [positions, accountsBalance, cdiAnnual, ipcaAnnual, grossSalaryNum, avgExpensesNum, totalDeductions, thirteenthReceivedNum, vacationThirdReceivedNum],
+    [positions, accountsBalance, cdiAnnual, ipcaAnnual, grossSalaryNum, avgExpensesNum, totalDeductions, thirteenthReceivedNum, vacationThirdReceivedNum, compoundSavings],
   )
 
   const currentTotal = projectionData[0]?.total ?? 0
@@ -209,17 +219,18 @@ export function ProjectionsPage({ positions, accountsSummary, items, formatCurre
     const totalGain = endOfYearTotal - currentTotal
     const now = new Date()
     let totalContributions = 0
-    if (grossSalaryNum > 0) {
-      for (let m = now.getMonth() + 1; m <= 11; m++) {
+    for (let m = now.getMonth() + 1; m <= 11; m++) {
+      let contribution = -avgExpensesNum
+      if (grossSalaryNum > 0) {
         const income = calculateMonthlyIncome(grossSalaryNum, totalDeductions)
-        let contribution = income.netIncome - avgExpensesNum
+        contribution += income.netIncome
         if (m === 11 && bonuses) {
           const thirteenthRemaining = Math.max(0, bonuses.thirteenthNet - thirteenthReceivedNum)
           const vacationThirdRemaining = Math.max(0, bonuses.vacationThirdNet - vacationThirdReceivedNum)
           contribution += thirteenthRemaining + vacationThirdRemaining
         }
-        totalContributions += contribution
       }
+      totalContributions += contribution
     }
     const fromInterest = totalGain - totalContributions
     return { totalGain, totalContributions, fromInterest }
@@ -271,260 +282,326 @@ export function ProjectionsPage({ positions, accountsSummary, items, formatCurre
                 Adjust market rates and income assumptions used for projections.
               </SheetDescription>
             </SheetHeader>
-            <div className="px-4 space-y-6 overflow-y-auto flex-1">
-              {/* Market Rates */}
-              <div className="space-y-3">
-                <h3 className="text-sm font-semibold flex items-center gap-2">
-                  <Percent className="h-3.5 w-3.5" />
-                  Market Rates
-                </h3>
-                {ratesLoading ? (
-                  <div className="space-y-3">
-                    <Skeleton className="h-10 w-full" />
-                    <Skeleton className="h-10 w-full" />
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    <div className="space-y-1.5">
-                      <Label htmlFor="cdi-rate" className="text-xs text-muted-foreground">
-                        CDI Annual (%)
-                        {rates && <span className="ml-1 opacity-60">— from BCB</span>}
-                      </Label>
-                      <Input
-                        id="cdi-rate"
-                        type="number"
-                        step="0.01"
-                        value={cdiOverride}
-                        onChange={(e) => setCdiOverride(e.target.value)}
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label htmlFor="ipca-rate" className="text-xs text-muted-foreground">
-                        IPCA Annual (%)
-                        {rates && <span className="ml-1 opacity-60">— from BCB</span>}
-                      </Label>
-                      <Input
-                        id="ipca-rate"
-                        type="number"
-                        step="0.01"
-                        value={ipcaOverride}
-                        onChange={(e) => setIpcaOverride(e.target.value)}
-                      />
-                    </div>
+            <div className="px-4 space-y-1 overflow-y-auto flex-1">
+              {/* Market Rates — collapsible */}
+              <div className="border-b border-border pb-1">
+                <button
+                  className="flex items-center gap-2 w-full text-left py-2.5"
+                  onClick={() => setSheetRatesOpen(!sheetRatesOpen)}
+                >
+                  {sheetRatesOpen ? <ChevronDown className="h-3.5 w-3.5 shrink-0" /> : <ChevronRight className="h-3.5 w-3.5 shrink-0" />}
+                  <Percent className="h-3.5 w-3.5 shrink-0" />
+                  <span className="text-sm font-semibold">Market Rates</span>
+                  {!sheetRatesOpen && (
+                    <span className="ml-auto text-[11px] text-muted-foreground tabular-nums">
+                      CDI {cdiAnnual.toFixed(2)}% · IPCA {ipcaAnnual.toFixed(2)}%
+                    </span>
+                  )}
+                </button>
+                {sheetRatesOpen && (
+                  <div className="pb-3 space-y-3">
+                    {ratesLoading ? (
+                      <div className="space-y-3">
+                        <Skeleton className="h-10 w-full" />
+                        <Skeleton className="h-10 w-full" />
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        <div className="space-y-1.5">
+                          <Label htmlFor="cdi-rate" className="text-xs text-muted-foreground">
+                            CDI Annual (%)
+                            {rates && <span className="ml-1 opacity-60">— from BCB</span>}
+                          </Label>
+                          <Input
+                            id="cdi-rate"
+                            type="number"
+                            step="0.01"
+                            value={cdiOverride}
+                            onChange={(e) => setCdiOverride(e.target.value)}
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label htmlFor="ipca-rate" className="text-xs text-muted-foreground">
+                            IPCA Annual (%)
+                            {rates && <span className="ml-1 opacity-60">— from BCB</span>}
+                          </Label>
+                          <Input
+                            id="ipca-rate"
+                            type="number"
+                            step="0.01"
+                            value={ipcaOverride}
+                            onChange={(e) => setIpcaOverride(e.target.value)}
+                          />
+                        </div>
+                        <label htmlFor="compound-savings" className="flex items-center gap-2 cursor-pointer pt-1">
+                          <input
+                            id="compound-savings"
+                            type="checkbox"
+                            checked={compoundSavings}
+                            onChange={(e) => setCompoundSavings(e.target.checked)}
+                            className="h-4 w-4 rounded border-input accent-primary"
+                          />
+                          <span className="text-xs text-muted-foreground flex items-center gap-1">
+                            Compound savings at CDI
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Info className="h-3 w-3 text-muted-foreground/60 cursor-help" />
+                              </TooltipTrigger>
+                              <TooltipContent side="top" className="max-w-[240px] text-xs">
+                                Enable if your bank balance earns CDI (e.g. CDB, remunerated account). Disable for regular checking accounts.
+                              </TooltipContent>
+                            </Tooltip>
+                          </span>
+                        </label>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
 
-              <div className="border-t border-border" />
-
-              {/* Income & Expenses */}
-              <div className="space-y-3">
-                <h3 className="text-sm font-semibold flex items-center gap-2">
-                  <Wallet className="h-3.5 w-3.5" />
-                  Income & Expenses
-                </h3>
-                <div className="space-y-3">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="gross-salary" className="text-xs text-muted-foreground">
-                      Gross Salary (R$)
-                    </Label>
-                    <Input
-                      id="gross-salary"
-                      type="number"
-                      step="100"
-                      placeholder="0.00"
-                      value={grossSalary}
-                      onChange={(e) => setGrossSalary(e.target.value)}
-                    />
-                  </div>
-                  {/* Other Deductions */}
-                  <div className="space-y-2">
-                    <Label className="text-xs text-muted-foreground">
-                      Other Deductions (R$/mo)
-                    </Label>
-                    {deductions.map((d, idx) => (
-                      <div key={idx} className="flex items-center gap-2">
-                        <span className="text-xs truncate flex-1">{d.name}</span>
-                        <span className="text-xs tabular-nums font-mono">{d.amount.toFixed(2)}</span>
-                        <button
-                          className="text-muted-foreground hover:text-destructive transition-colors"
-                          onClick={() => setDeductions(prev => prev.filter((_, i) => i !== idx))}
-                        >
-                          <X className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                    ))}
-                    <div className="flex items-end gap-2">
-                      <div className="flex-1 space-y-1">
-                        <Input
-                          placeholder="Name"
-                          value={newDeductionName}
-                          onChange={(e) => setNewDeductionName(e.target.value)}
-                          className="h-8 text-xs"
-                        />
-                      </div>
-                      <div className="w-24 space-y-1">
-                        <Input
-                          type="number"
-                          step="0.01"
-                          placeholder="0.00"
-                          value={newDeductionAmount}
-                          onChange={(e) => setNewDeductionAmount(e.target.value)}
-                          className="h-8 text-xs"
-                        />
-                      </div>
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        className="h-8 w-8 shrink-0"
-                        disabled={!newDeductionName.trim() || !parseFloat(newDeductionAmount)}
-                        onClick={() => {
-                          setDeductions(prev => [...prev, { name: newDeductionName.trim(), amount: parseFloat(newDeductionAmount) }])
-                          setNewDeductionName('')
-                          setNewDeductionAmount('')
-                        }}
-                      >
-                        <Plus className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
-                    {totalDeductions > 0 && (
-                      <div className="flex justify-between text-xs pt-1">
-                        <span className="text-muted-foreground">Total deductions</span>
-                        <span className="font-semibold">{formatCurrency(totalDeductions, 'BRL')}</span>
-                      </div>
-                    )}
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="avg-expenses" className="text-xs text-muted-foreground">
-                      Avg Monthly Expenses (R$)
-                      {monthsAnalyzed > 0 && (
-                        <span className="ml-1 opacity-60">— from {monthsAnalyzed} months</span>
-                      )}
-                    </Label>
-                    {avgExpensesLoading ? (
-                      <Skeleton className="h-10 w-full" />
-                    ) : (
+              {/* Income & Expenses — collapsible */}
+              <div className="border-b border-border pb-1">
+                <button
+                  className="flex items-center gap-2 w-full text-left py-2.5"
+                  onClick={() => setSheetIncomeOpen(!sheetIncomeOpen)}
+                >
+                  {sheetIncomeOpen ? <ChevronDown className="h-3.5 w-3.5 shrink-0" /> : <ChevronRight className="h-3.5 w-3.5 shrink-0" />}
+                  <Wallet className="h-3.5 w-3.5 shrink-0" />
+                  <span className="text-sm font-semibold">Income & Expenses</span>
+                  {!sheetIncomeOpen && regularIncome && (
+                    <span className={`ml-auto text-[11px] tabular-nums ${monthlySurplus >= 0 ? 'text-emerald-500' : 'text-red-400'}`}>
+                      Surplus {formatCurrency(monthlySurplus, 'BRL')}
+                    </span>
+                  )}
+                </button>
+                {sheetIncomeOpen && (
+                  <div className="pb-3 space-y-3">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="gross-salary" className="text-xs text-muted-foreground">
+                        Gross Salary (R$)
+                      </Label>
                       <Input
-                        id="avg-expenses"
+                        id="gross-salary"
                         type="number"
                         step="100"
                         placeholder="0.00"
-                        value={avgExpenses}
-                        onChange={(e) => setAvgExpenses(e.target.value)}
+                        value={grossSalary}
+                        onChange={(e) => setGrossSalary(e.target.value)}
                       />
-                    )}
-                  </div>
-                </div>
-                {regularIncome && (
-                  <div className="space-y-1.5 text-xs border-t border-border pt-3">
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Net Income</span>
-                      <span className="font-semibold">{formatCurrency(regularIncome.netIncome, 'BRL')}</span>
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">INSS</span>
-                      <span className="font-semibold">{formatCurrency(regularIncome.inss, 'BRL')}</span>
+                    {/* Other Deductions */}
+                    <div className="space-y-2">
+                      <Label className="text-xs text-muted-foreground">
+                        Other Deductions (R$/mo)
+                      </Label>
+                      {deductions.map((d, idx) => (
+                        <div key={idx} className="flex items-center gap-2">
+                          <span className="text-xs truncate flex-1">{d.name}</span>
+                          <span className="text-xs tabular-nums font-mono">{d.amount.toFixed(2)}</span>
+                          <button
+                            className="text-muted-foreground hover:text-destructive transition-colors"
+                            onClick={() => setDeductions(prev => prev.filter((_, i) => i !== idx))}
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      ))}
+                      <div className="flex items-end gap-2">
+                        <div className="flex-1 space-y-1">
+                          <Input
+                            placeholder="Name"
+                            value={newDeductionName}
+                            onChange={(e) => setNewDeductionName(e.target.value)}
+                            className="h-8 text-xs"
+                          />
+                        </div>
+                        <div className="w-24 space-y-1">
+                          <Input
+                            type="number"
+                            step="0.01"
+                            placeholder="0.00"
+                            value={newDeductionAmount}
+                            onChange={(e) => setNewDeductionAmount(e.target.value)}
+                            className="h-8 text-xs"
+                          />
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="h-8 w-8 shrink-0"
+                          disabled={!newDeductionName.trim() || !parseFloat(newDeductionAmount)}
+                          onClick={() => {
+                            setDeductions(prev => [...prev, { name: newDeductionName.trim(), amount: parseFloat(newDeductionAmount) }])
+                            setNewDeductionName('')
+                            setNewDeductionAmount('')
+                          }}
+                        >
+                          <Plus className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                      {totalDeductions > 0 && (
+                        <div className="flex justify-between text-xs pt-1">
+                          <span className="text-muted-foreground">Total deductions</span>
+                          <span className="font-semibold">{formatCurrency(totalDeductions, 'BRL')}</span>
+                        </div>
+                      )}
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">IRRF</span>
-                      <span className="font-semibold">{formatCurrency(regularIncome.irrf, 'BRL')}</span>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="avg-expenses" className="text-xs text-muted-foreground">
+                        Avg Monthly Expenses (R$)
+                        {monthsAnalyzed > 0 && (
+                          <span className="ml-1 opacity-60">— from {monthsAnalyzed} months</span>
+                        )}
+                      </Label>
+                      {avgExpensesLoading ? (
+                        <Skeleton className="h-10 w-full" />
+                      ) : (
+                        <Input
+                          id="avg-expenses"
+                          type="number"
+                          step="100"
+                          placeholder="0.00"
+                          value={avgExpenses}
+                          onChange={(e) => setAvgExpenses(e.target.value)}
+                        />
+                      )}
                     </div>
-                    {regularIncome.otherDeductions > 0 && (
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Other Deductions</span>
-                        <span className="font-semibold">{formatCurrency(regularIncome.otherDeductions, 'BRL')}</span>
+                    {regularIncome && (
+                      <div className="rounded-lg bg-muted/30 p-3 space-y-1.5 text-xs">
+                        <p className="text-xs font-semibold text-muted-foreground mb-2">Tax Breakdown</p>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">INSS</span>
+                          <span className="font-semibold">{formatCurrency(regularIncome.inss, 'BRL')}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">IRRF</span>
+                          <span className="font-semibold">{formatCurrency(regularIncome.irrf, 'BRL')}</span>
+                        </div>
+                        {regularIncome.otherDeductions > 0 && (
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Other Deductions</span>
+                            <span className="font-semibold">{formatCurrency(regularIncome.otherDeductions, 'BRL')}</span>
+                          </div>
+                        )}
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Net Income</span>
+                          <span className="font-semibold">{formatCurrency(regularIncome.netIncome, 'BRL')}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground flex items-center gap-1">
+                            Monthly Surplus
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Info className="h-3 w-3 text-muted-foreground/60 cursor-help" />
+                              </TooltipTrigger>
+                              <TooltipContent side="top" className="max-w-[220px] text-xs">
+                                Net income ({formatCurrency(regularIncome.netIncome, 'BRL')}) minus avg monthly expenses ({formatCurrency(avgExpensesNum, 'BRL')})
+                              </TooltipContent>
+                            </Tooltip>
+                          </span>
+                          <span className={`font-semibold ${monthlySurplus >= 0 ? 'text-emerald-500' : 'text-red-400'}`}>
+                            {formatCurrency(monthlySurplus, 'BRL')}
+                          </span>
+                        </div>
                       </div>
                     )}
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Monthly Surplus</span>
-                      <span className={`font-semibold ${monthlySurplus >= 0 ? 'text-emerald-500' : 'text-red-400'}`}>
-                        {formatCurrency(monthlySurplus, 'BRL')}
-                      </span>
-                    </div>
                   </div>
                 )}
               </div>
 
-              {/* Additional Income (December bonuses) */}
+              {/* Additional Income — collapsible (December bonuses) */}
               {bonuses && grossSalaryNum > 0 && (
-                <>
-                  <div className="border-t border-border" />
-                  <div className="space-y-3">
-                    <h3 className="text-sm font-semibold flex items-center gap-2">
-                      <Gift className="h-3.5 w-3.5" />
-                      Additional Income
-                      <span className="text-[11px] font-normal text-muted-foreground ml-auto">December lump sums</span>
-                    </h3>
-                    {/* 13th Salary */}
-                    <div className="space-y-1.5">
-                      <div className="flex justify-between text-xs">
-                        <span className="font-medium">13th Salary</span>
-                        <span className="text-muted-foreground">Expected: {formatCurrency(bonuses.thirteenthNet, 'BRL')}</span>
-                      </div>
-                      <div className="space-y-1">
-                        <Label htmlFor="thirteenth-received" className="text-xs text-muted-foreground">
-                          Amount received (R$)
-                        </Label>
-                        <Input
-                          id="thirteenth-received"
-                          type="number"
-                          step="0.01"
-                          placeholder="0.00"
-                          value={thirteenthReceived}
-                          onChange={(e) => setThirteenthReceived(e.target.value)}
-                        />
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="h-1.5 flex-1 rounded-full bg-muted overflow-hidden">
-                          <div
-                            className="h-full rounded-full bg-emerald-500 transition-all duration-300"
-                            style={{ width: `${Math.min(100, (thirteenthReceivedNum / bonuses.thirteenthNet) * 100)}%` }}
-                          />
-                        </div>
-                        <span className="text-[11px] tabular-nums text-muted-foreground w-8 text-right">{Math.min(100, Math.round((thirteenthReceivedNum / bonuses.thirteenthNet) * 100))}%</span>
-                      </div>
-                    </div>
-                    {/* Vacation 1/3 */}
-                    <div className="space-y-1.5">
-                      <div className="flex justify-between text-xs">
-                        <span className="font-medium">Vacation 1/3</span>
-                        <span className="text-muted-foreground">Expected: {formatCurrency(bonuses.vacationThirdNet, 'BRL')}</span>
-                      </div>
-                      <div className="space-y-1">
-                        <Label htmlFor="vacation-received" className="text-xs text-muted-foreground">
-                          Amount received (R$)
-                        </Label>
-                        <Input
-                          id="vacation-received"
-                          type="number"
-                          step="0.01"
-                          placeholder="0.00"
-                          value={vacationThirdReceived}
-                          onChange={(e) => setVacationThirdReceived(e.target.value)}
-                        />
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="h-1.5 flex-1 rounded-full bg-muted overflow-hidden">
-                          <div
-                            className="h-full rounded-full bg-emerald-500 transition-all duration-300"
-                            style={{ width: `${Math.min(100, (vacationThirdReceivedNum / bonuses.vacationThirdNet) * 100)}%` }}
-                          />
-                        </div>
-                        <span className="text-[11px] tabular-nums text-muted-foreground w-8 text-right">{Math.min(100, Math.round((vacationThirdReceivedNum / bonuses.vacationThirdNet) * 100))}%</span>
-                      </div>
-                    </div>
-                    {/* Total remaining summary */}
-                    <div className="space-y-1.5 text-xs border-t border-border pt-3">
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Remaining for December</span>
-                        <span className="font-semibold">{formatCurrency(
+                <div className="pb-1">
+                  <button
+                    className="flex items-center gap-2 w-full text-left py-2.5"
+                    onClick={() => setSheetBonusesOpen(!sheetBonusesOpen)}
+                  >
+                    {sheetBonusesOpen ? <ChevronDown className="h-3.5 w-3.5 shrink-0" /> : <ChevronRight className="h-3.5 w-3.5 shrink-0" />}
+                    <Gift className="h-3.5 w-3.5 shrink-0" />
+                    <span className="text-sm font-semibold">Additional Income</span>
+                    {!sheetBonusesOpen && (
+                      <span className="ml-auto text-[11px] text-muted-foreground tabular-nums">
+                        {formatCurrency(
                           Math.max(0, bonuses.thirteenthNet - thirteenthReceivedNum) + Math.max(0, bonuses.vacationThirdNet - vacationThirdReceivedNum),
                           'BRL',
-                        )}</span>
+                        )} remaining
+                      </span>
+                    )}
+                  </button>
+                  {sheetBonusesOpen && (
+                    <div className="pb-3 space-y-3">
+                      <span className="text-[11px] text-muted-foreground">December lump sums</span>
+                      {/* 13th Salary */}
+                      <div className="space-y-1.5">
+                        <div className="flex justify-between text-xs">
+                          <span className="font-medium">13th Salary</span>
+                          <span className="text-muted-foreground">Expected: {formatCurrency(bonuses.thirteenthNet, 'BRL')}</span>
+                        </div>
+                        <div className="space-y-1">
+                          <Label htmlFor="thirteenth-received" className="text-xs text-muted-foreground">
+                            Amount received (R$)
+                          </Label>
+                          <Input
+                            id="thirteenth-received"
+                            type="number"
+                            step="0.01"
+                            placeholder="0.00"
+                            value={thirteenthReceived}
+                            onChange={(e) => setThirteenthReceived(e.target.value)}
+                          />
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="h-1.5 flex-1 rounded-full bg-muted overflow-hidden">
+                            <div
+                              className="h-full rounded-full bg-emerald-500 transition-all duration-300"
+                              style={{ width: `${Math.min(100, (thirteenthReceivedNum / bonuses.thirteenthNet) * 100)}%` }}
+                            />
+                          </div>
+                          <span className="text-[11px] tabular-nums text-muted-foreground w-8 text-right">{Math.min(100, Math.round((thirteenthReceivedNum / bonuses.thirteenthNet) * 100))}%</span>
+                        </div>
+                      </div>
+                      {/* Vacation 1/3 */}
+                      <div className="space-y-1.5">
+                        <div className="flex justify-between text-xs">
+                          <span className="font-medium">Vacation 1/3</span>
+                          <span className="text-muted-foreground">Expected: {formatCurrency(bonuses.vacationThirdNet, 'BRL')}</span>
+                        </div>
+                        <div className="space-y-1">
+                          <Label htmlFor="vacation-received" className="text-xs text-muted-foreground">
+                            Amount received (R$)
+                          </Label>
+                          <Input
+                            id="vacation-received"
+                            type="number"
+                            step="0.01"
+                            placeholder="0.00"
+                            value={vacationThirdReceived}
+                            onChange={(e) => setVacationThirdReceived(e.target.value)}
+                          />
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="h-1.5 flex-1 rounded-full bg-muted overflow-hidden">
+                            <div
+                              className="h-full rounded-full bg-emerald-500 transition-all duration-300"
+                              style={{ width: `${Math.min(100, (vacationThirdReceivedNum / bonuses.vacationThirdNet) * 100)}%` }}
+                            />
+                          </div>
+                          <span className="text-[11px] tabular-nums text-muted-foreground w-8 text-right">{Math.min(100, Math.round((vacationThirdReceivedNum / bonuses.vacationThirdNet) * 100))}%</span>
+                        </div>
+                      </div>
+                      {/* Total remaining summary */}
+                      <div className="rounded-lg bg-muted/30 p-3 text-xs">
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Remaining for December</span>
+                          <span className="font-semibold">{formatCurrency(
+                            Math.max(0, bonuses.thirteenthNet - thirteenthReceivedNum) + Math.max(0, bonuses.vacationThirdNet - vacationThirdReceivedNum),
+                            'BRL',
+                          )}</span>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                </>
+                  )}
+                </div>
               )}
             </div>
           </SheetContent>

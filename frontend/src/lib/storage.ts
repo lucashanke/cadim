@@ -30,6 +30,7 @@ export interface SalaryConfig {
   thirteenthReceived?: number
   vacationThirdReceived?: number
   bonusYear?: number
+  compoundSavings?: boolean // whether bank balance earns CDI (default false)
 }
 
 export function getSalaryConfig(): SalaryConfig | null {

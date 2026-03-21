@@ -20,6 +20,7 @@ export interface ProjectionParams {
   otherDeductions?: number   // total monthly deductions beyond INSS/IRRF
   thirteenthReceived?: number  // net amount already received this year
   vacationThirdReceived?: number // net amount already received this year
+  compoundSavings?: boolean  // whether bank balance earns CDI (default false)
 }
 
 const FLAT_TYPES = new Set([
@@ -78,20 +79,20 @@ export function projectPosition(
 }
 
 export function projectNetWorth(params: ProjectionParams): ProjectionDataPoint[] {
-  const { positions, accountsBalance, cdiAnnual, ipcaAnnual, grossSalary, avgMonthlyExpenses, otherDeductions = 0, thirteenthReceived = 0, vacationThirdReceived = 0 } = params
+  const { positions, accountsBalance, cdiAnnual, ipcaAnnual, grossSalary, avgMonthlyExpenses, otherDeductions = 0, thirteenthReceived = 0, vacationThirdReceived = 0, compoundSavings = false } = params
 
   const now = new Date()
   const startMonth = now.getMonth()
   const startYear = now.getFullYear()
   const points: ProjectionDataPoint[] = []
-  const cdiMonthly = annualToMonthly(cdiAnnual)
+  const cdiMonthly = compoundSavings ? annualToMonthly(cdiAnnual) : 0
 
   let savings = accountsBalance
   let savingsBase = accountsBalance // tracks savings without CDI compounding
 
   const baseInvestments = positions.reduce((sum, pos) => sum + pos.amount, 0)
 
-  // Compute remaining bonuses for December
+  // Compute remaining bonuses for current-year December only
   let thirteenthRemaining = 0
   let vacationThirdRemaining = 0
   if (grossSalary > 0) {
@@ -108,50 +109,53 @@ export function projectNetWorth(params: ProjectionParams): ProjectionDataPoint[]
     const monthKey = `${year}-${String(m + 1).padStart(2, '0')}`
     const label = monthDate.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
     const isCurrentMonth = i === 0
+    const isCurrentYearDecember = m === 11 && year === startYear
 
     if (isCurrentMonth) {
       // Current month: balance already reflects partial income/expenses
+      const today = now.getDate()
+      const daysInMonth = new Date(year, m + 1, 0).getDate()
+
+      let pendingIncome = 0
       if (grossSalary > 0) {
         const income = calculateMonthlyIncome(grossSalary, otherDeductions)
         const advance = grossSalary * 0.5
         const remainder = income.netIncome - advance
-        const today = now.getDate()
-        const daysInMonth = new Date(year, m + 1, 0).getDate()
 
-        let pendingIncome: number
         if (today < 15) {
           pendingIncome = income.netIncome // neither payment received
         } else if (today < daysInMonth) {
           pendingIncome = remainder // advance already in balance
-        } else {
-          pendingIncome = 0 // all received
         }
 
-        // Add December bonuses if current month is December
-        if (m === 11) {
+        // Add December bonuses only for current year
+        if (isCurrentYearDecember) {
           pendingIncome += thirteenthRemaining + vacationThirdRemaining
         }
-
-        const daysLeft = daysInMonth - today
-        const remainingExpenses = avgMonthlyExpenses * (daysLeft / daysInMonth)
-
-        const contribution = pendingIncome - remainingExpenses
-        savings += contribution
-        savingsBase += contribution
       }
+
+      const daysLeft = daysInMonth - today
+      const remainingExpenses = avgMonthlyExpenses * (daysLeft / daysInMonth)
+
+      const contribution = pendingIncome - remainingExpenses
+      savings += contribution
+      savingsBase += contribution
     } else {
-      // Future months: full income minus full expenses
+      // Future months
+      let contribution = -avgMonthlyExpenses
       if (grossSalary > 0) {
         const income = calculateMonthlyIncome(grossSalary, otherDeductions)
-        let contribution = income.netIncome - avgMonthlyExpenses
-        // Add December bonuses
-        if (m === 11) {
+        contribution += income.netIncome
+        // Add December bonuses only for current year
+        if (isCurrentYearDecember) {
           contribution += thirteenthRemaining + vacationThirdRemaining
         }
-        savings += contribution
-        savingsBase += contribution
       }
-      savings *= (1 + cdiMonthly)
+      savings += contribution
+      savingsBase += contribution
+      if (compoundSavings) {
+        savings *= (1 + cdiMonthly)
+      }
     }
 
     let investmentsTotal = 0

@@ -35,9 +35,8 @@ describe('projectPosition', () => {
       fixed_annual_rate: 0,
     })
     const result = projectPosition(pos, futureDate(6), 13.25, 5.0)
-    // Should grow: 10000 * (1 + monthlyRate)^6
     expect(result).toBeGreaterThan(10000)
-    expect(result).toBeLessThan(11000) // ~6.3% in 6 months at 13.25%
+    expect(result).toBeLessThan(11000)
   })
 
   it('projects CDI position with partial rate', () => {
@@ -47,7 +46,6 @@ describe('projectPosition', () => {
       fixed_annual_rate: 1.0,
     })
     const result = projectPosition(pos, futureDate(6), 13.25, 5.0)
-    // 80% of 13.25 = 10.6, + 1.0 = 11.6% annual
     expect(result).toBeGreaterThan(10000)
     expect(result).toBeLessThan(10700)
   })
@@ -59,7 +57,6 @@ describe('projectPosition', () => {
       fixed_annual_rate: 6.0,
     })
     const result = projectPosition(pos, futureDate(6), 13.25, 5.0)
-    // effective = 5.0 + 6.0 = 11.0% annual
     expect(result).toBeGreaterThan(10000)
     expect(result).toBeLessThan(10700)
   })
@@ -96,7 +93,6 @@ describe('projectPosition', () => {
       due_date: pastDate.toISOString().split('T')[0],
     })
     const result = projectPosition(pos, futureDate(6), 13.25, 5.0)
-    // Past maturity → defaults to 100% CDI (13.25% annual)
     expect(result).toBeGreaterThan(10000)
     expect(result).toBeLessThan(11000)
   })
@@ -114,7 +110,6 @@ describe('projectPosition', () => {
   it('projects positions without rate info at 100% CDI', () => {
     const pos = makePosition({})
     const result = projectPosition(pos, futureDate(6), 13.25, 5.0)
-    // No rate info → defaults to 100% CDI (13.25% annual)
     expect(result).toBeGreaterThan(10000)
     expect(result).toBeLessThan(11000)
   })
@@ -125,17 +120,13 @@ describe('projectNetWorth', () => {
     const points = projectNetWorth({
       positions: [],
       accountsBalance: 10000,
-
       cdiAnnual: 13.25,
       ipcaAnnual: 5.0,
       ...defaultSalaryParams,
     })
 
     expect(points).toHaveLength(13)
-    // First point: balance + pending income - remaining expenses (no interest)
     expect(points[0].total).toBeGreaterThan(9000)
-    // Last point should show CDI growth on savings
-    expect(points[points.length - 1].total).toBeGreaterThan(points[0].total)
   })
 
   it('includes investment growth in totals', () => {
@@ -149,15 +140,12 @@ describe('projectNetWorth', () => {
     const points = projectNetWorth({
       positions: [pos],
       accountsBalance: 0,
-
       cdiAnnual: 13.25,
       ipcaAnnual: 5.0,
       ...defaultSalaryParams,
     })
 
-    // First point should be approximately current amount
     expect(points[0].total).toBeCloseTo(100000, -1)
-    // Last point should show growth (if we have months remaining)
     if (points.length > 1) {
       expect(points[points.length - 1].total).toBeGreaterThan(100000)
     }
@@ -172,7 +160,6 @@ describe('projectNetWorth', () => {
       ...defaultSalaryParams,
     })
 
-    // No salary, so no partial-month adjustment — just CDI compounding
     expect(points[0].total).toBeGreaterThan(19900)
   })
 
@@ -180,7 +167,6 @@ describe('projectNetWorth', () => {
     const points = projectNetWorth({
       positions: [],
       accountsBalance: 0,
-
       cdiAnnual: 0,
       ipcaAnnual: 0,
       ...defaultSalaryParams,
@@ -194,56 +180,87 @@ describe('projectNetWorth', () => {
     const points = projectNetWorth({
       positions: [],
       accountsBalance: 10000,
-
       cdiAnnual: 13.25,
       ipcaAnnual: 5.0,
       grossSalary: 10000,
       avgMonthlyExpenses: 5000,
+      compoundSavings: true,
     })
 
     if (points.length > 2) {
-      // Total should grow over time (net income > expenses + CDI compounding)
       expect(points[1].total).toBeGreaterThan(points[0].total)
       expect(points[2].total).toBeGreaterThan(points[1].total)
     }
   })
 
-  it('cumulative compounding: compound interest grows over time', () => {
+  it('cumulative compounding: compound interest grows over time when enabled', () => {
     const points = projectNetWorth({
       positions: [],
       accountsBalance: 0,
-
       cdiAnnual: 13.25,
       ipcaAnnual: 5.0,
       grossSalary: 10000,
       avgMonthlyExpenses: 3000,
+      compoundSavings: true,
     })
 
     if (points.length > 2) {
-      // Compound interest should increase as savings base grows
       expect(points[2].compoundInterest).toBeGreaterThan(points[1].compoundInterest)
     }
   })
 
-  it('zero salary: compound interest grows at CDI', () => {
+  it('compoundSavings off: no CDI on savings balance', () => {
     const points = projectNetWorth({
       positions: [],
       accountsBalance: 10000,
-
       cdiAnnual: 13.25,
       ipcaAnnual: 5.0,
       grossSalary: 0,
       avgMonthlyExpenses: 0,
+      compoundSavings: false,
     })
 
-    // Current month: no interest applied
+    // No CDI on savings → all months should have same total (no growth)
+    expect(points[0].total).toBe(10000)
+    if (points.length > 1) {
+      expect(points[1].total).toBe(10000)
+      expect(points[1].compoundInterest).toBe(0)
+    }
+  })
+
+  it('compoundSavings on: CDI grows savings balance', () => {
+    const points = projectNetWorth({
+      positions: [],
+      accountsBalance: 10000,
+      cdiAnnual: 13.25,
+      ipcaAnnual: 5.0,
+      grossSalary: 0,
+      avgMonthlyExpenses: 0,
+      compoundSavings: true,
+    })
+
     expect(points[0].savings).toBe(10000)
     expect(points[0].compoundInterest).toBe(0)
     if (points.length > 1) {
-      // Future months: interest compounds
       expect(points[1].savings).toBe(10000)
       expect(points[1].compoundInterest).toBeGreaterThan(0)
       expect(points[1].total).toBeGreaterThan(points[0].total)
+    }
+  })
+
+  it('expenses are deducted even without salary', () => {
+    const points = projectNetWorth({
+      positions: [],
+      accountsBalance: 10000,
+      cdiAnnual: 0,
+      ipcaAnnual: 0,
+      grossSalary: 0,
+      avgMonthlyExpenses: 1000,
+    })
+
+    if (points.length > 1) {
+      // Future months should decrease by expenses
+      expect(points[1].total).toBeLessThan(points[0].total)
     }
   })
 
@@ -252,7 +269,6 @@ describe('projectNetWorth', () => {
     const today = now.getDate()
     const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
 
-    // With salary but zero CDI/expenses to isolate the partial income effect
     const points = projectNetWorth({
       positions: [],
       accountsBalance: 0,
@@ -275,7 +291,6 @@ describe('projectNetWorth', () => {
       expectedPending = 0
     }
 
-    // Current month savings should equal pending income (no expenses, no CDI)
     expect(points[0].savings).toBeCloseTo(expectedPending, 0)
   })
 
@@ -292,13 +307,11 @@ describe('projectNetWorth', () => {
       avgMonthlyExpenses: 5000,
     })
 
-    // Find a regular future month and December
     const octIdx = 9 - now.getMonth()
     const decIdx = 11 - now.getMonth()
     if (octIdx > 0 && decIdx < points.length) {
       const octSurplus = points[octIdx].savings - points[octIdx - 1].savings
       const decSurplus = points[decIdx].savings - points[decIdx - 1].savings
-      // December surplus should be bigger due to bonuses
       expect(decSurplus).toBeGreaterThan(octSurplus)
     }
   })
@@ -308,9 +321,7 @@ describe('projectNetWorth', () => {
     if (now.getMonth() > 10) return
 
     const gross = 10000
-    const bonuses = calculateAnnualBonuses(gross)
 
-    // No received amounts — full bonuses
     const pointsFull = projectNetWorth({
       positions: [],
       accountsBalance: 0,
@@ -322,7 +333,6 @@ describe('projectNetWorth', () => {
       vacationThirdReceived: 0,
     })
 
-    // Partial received amounts
     const received13 = 3000
     const receivedVac = 1000
     const pointsPartial = projectNetWorth({
@@ -338,7 +348,6 @@ describe('projectNetWorth', () => {
 
     const decIdx = 11 - now.getMonth()
     if (decIdx > 0 && decIdx < pointsFull.length) {
-      // The difference in December savings should equal the received amounts
       const fullDecSavings = pointsFull[decIdx].savings
       const partialDecSavings = pointsPartial[decIdx].savings
       expect(fullDecSavings - partialDecSavings).toBeCloseTo(received13 + receivedVac, 0)
@@ -368,8 +377,34 @@ describe('projectNetWorth', () => {
     if (octIdx > 0 && decIdx < points.length) {
       const octSurplus = points[octIdx].savings - points[octIdx - 1].savings
       const decSurplus = points[decIdx].savings - points[decIdx - 1].savings
-      // December should be the same as any regular month
       expect(decSurplus).toBeCloseTo(octSurplus, 0)
     }
+  })
+
+  it('bonuses are not double-counted when projection spans two Decembers', () => {
+    // This test is relevant when run in December (startMonth === 11)
+    // The loop would hit Dec at i=0 and Dec at i=12
+    const now = new Date()
+    if (now.getMonth() !== 11) return
+
+    const gross = 10000
+    const bonuses = calculateAnnualBonuses(gross)
+
+    const points = projectNetWorth({
+      positions: [],
+      accountsBalance: 0,
+      cdiAnnual: 0,
+      ipcaAnnual: 0,
+      grossSalary: gross,
+      avgMonthlyExpenses: 0,
+      thirteenthReceived: 0,
+      vacationThirdReceived: 0,
+    })
+
+    // i=12 is next year's December — should NOT include bonuses again
+    // Regular month income only
+    const income = calculateMonthlyIncome(gross)
+    const nextDecSurplus = points[12].savings - points[11].savings
+    expect(nextDecSurplus).toBeCloseTo(income.netIncome, 0)
   })
 })
