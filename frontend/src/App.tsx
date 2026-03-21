@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { Routes, Route, Navigate } from 'react-router-dom'
 import { PluggyConnect } from 'react-pluggy-connect'
 import { AppSidebar } from '@/components/Sidebar'
 import { Header } from '@/components/Header'
@@ -13,11 +14,10 @@ import { EditManualPositionModal } from '@/components/modals/EditManualPositionM
 import { INVESTMENT_TYPE_LABELS, SUBTYPE_LABELS } from '@/constants/investments'
 import { getStoredItems, storeItems, getManualPositions, saveManualPositions, fetchItemName } from '@/lib/storage'
 import { formatCurrency } from '@/lib/format'
-import type { HealthStatus, AccountsSummary, InvestmentsSummary, InvestmentPosition, ConnectedItem, ManualPosition, Page, CreditCardAccount, BillingCycle } from '@/types'
+import type { HealthStatus, AccountsSummary, InvestmentsSummary, InvestmentPosition, ConnectedItem, ManualPosition, CreditCardAccount, BillingCycle } from '@/types'
 import './App.css'
 
 function App() {
-  const [currentPage, setCurrentPage] = useState<Page>('dashboard')
   const [health, setHealth] = useState<HealthStatus | null>(null)
   const [accountsSummary, setAccountsSummary] = useState<AccountsSummary | null>(null)
   const [connectToken, setConnectToken] = useState<string | null>(null)
@@ -345,70 +345,73 @@ function App() {
   return (
     <SidebarProvider className="h-screen overflow-hidden">
       <TooltipProvider>
-      <AppSidebar currentPage={currentPage} setCurrentPage={setCurrentPage} />
+      <AppSidebar />
 
       <SidebarInset className="overflow-hidden">
         <Header />
 
         <div className="flex-1 overflow-auto p-8">
-          {currentPage === 'investments' && (
-            <InvestmentsPage
-              items={items}
-              positions={allPositions}
-              loading={positionsLoading}
-              error={positionsError}
-              onRetry={() => fetchAllPositions(items)}
-              formatCurrency={formatCurrency}
-              manualPositionIds={new Set(manualPositions.map(p => p.id))}
-              onAddPosition={() => setShowAddModal(true)}
-              onEditPosition={(pos) => setEditingManual(manualPositions.find(m => m.id === pos.id) ?? null)}
-              onRemovePosition={handleRemoveManual}
-            />
-          )}
-          {currentPage === 'credit-cards' && (
-            <CreditCardsPage
-              items={items}
-              creditCards={creditCards}
-              loading={creditCardsLoading}
-              error={creditCardsError}
-              onRetry={() => fetchAllCreditCards(items)}
-              formatCurrency={formatCurrency}
-              billingCycles={billingCycles}
-              billingCyclesLoading={billingCyclesLoading}
-            />
-          )}
-          {currentPage === 'projections' && (
-            <ProjectionsPage
-              positions={allPositions}
-              accountsSummary={accountsSummary}
-              items={items}
-              formatCurrency={formatCurrency}
-            />
-          )}
-          {currentPage === 'dashboard' && (
-            <DashboardPage
-              health={health}
-              loading={loading}
-              accountsSummary={accountsSummary}
-              accountsLoading={accountsLoading}
-              accountsError={accountsError}
-              investmentsSummary={investmentsSummary}
-              investmentsLoading={investmentsLoading}
-              investmentsError={investmentsError}
-              manualTotal={manualTotal}
-              error={error}
-              items={items}
-              formatCurrency={formatCurrency}
-              onConnectBank={handleConnectBank}
-              onDisconnectAll={handleDisconnectAll}
-              onRetryAccounts={() => fetchAllAccounts(items)}
-              onRetryInvestments={() => fetchAllInvestments(items)}
-              allPositions={allPositions}
-              creditCards={creditCards}
-              billingCycles={billingCycles}
-              billingCyclesLoading={billingCyclesLoading}
-            />
-          )}
+          <Routes>
+            <Route path="/" element={
+              <DashboardPage
+                health={health}
+                loading={loading}
+                accountsSummary={accountsSummary}
+                accountsLoading={accountsLoading}
+                accountsError={accountsError}
+                investmentsSummary={investmentsSummary}
+                investmentsLoading={investmentsLoading}
+                investmentsError={investmentsError}
+                manualTotal={manualTotal}
+                error={error}
+                items={items}
+                formatCurrency={formatCurrency}
+                onConnectBank={handleConnectBank}
+                onDisconnectAll={handleDisconnectAll}
+                onRetryAccounts={() => fetchAllAccounts(items)}
+                onRetryInvestments={() => fetchAllInvestments(items)}
+                allPositions={allPositions}
+                creditCards={creditCards}
+                billingCycles={billingCycles}
+                billingCyclesLoading={billingCyclesLoading}
+              />
+            } />
+            <Route path="/investments" element={
+              <InvestmentsPage
+                items={items}
+                positions={allPositions}
+                loading={positionsLoading}
+                error={positionsError}
+                onRetry={() => fetchAllPositions(items)}
+                formatCurrency={formatCurrency}
+                manualPositionIds={new Set(manualPositions.map(p => p.id))}
+                onAddPosition={() => setShowAddModal(true)}
+                onEditPosition={(pos) => setEditingManual(manualPositions.find(m => m.id === pos.id) ?? null)}
+                onRemovePosition={handleRemoveManual}
+              />
+            } />
+            <Route path="/credit-cards" element={
+              <CreditCardsPage
+                items={items}
+                creditCards={creditCards}
+                loading={creditCardsLoading}
+                error={creditCardsError}
+                onRetry={() => fetchAllCreditCards(items)}
+                formatCurrency={formatCurrency}
+                billingCycles={billingCycles}
+                billingCyclesLoading={billingCyclesLoading}
+              />
+            } />
+            <Route path="/projections" element={
+              <ProjectionsPage
+                positions={allPositions}
+                accountsSummary={accountsSummary}
+                items={items}
+                formatCurrency={formatCurrency}
+              />
+            } />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
         </div>
       </SidebarInset>
 

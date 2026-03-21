@@ -1,5 +1,5 @@
 import type { InvestmentPosition } from '@/types'
-import { calculateMonthlyIncome } from './clt-taxes'
+import { calculateMonthlyIncome, calculateAnnualBonuses } from './clt-taxes'
 
 export interface ProjectionDataPoint {
   month: string // "2026-04"
@@ -17,8 +17,9 @@ export interface ProjectionParams {
   ipcaAnnual: number
   grossSalary: number        // 0 = salary disabled (backward compat)
   avgMonthlyExpenses: number  // 0 = no expenses
-  thirteenthFirstMonth?: number // 0-indexed month for 13th 1st installment (default 10 = November)
   otherDeductions?: number   // total monthly deductions beyond INSS/IRRF
+  thirteenthReceived?: number  // net amount already received this year
+  vacationThirdReceived?: number // net amount already received this year
 }
 
 const FLAT_TYPES = new Set([
@@ -77,7 +78,7 @@ export function projectPosition(
 }
 
 export function projectNetWorth(params: ProjectionParams): ProjectionDataPoint[] {
-  const { positions, accountsBalance, cdiAnnual, ipcaAnnual, grossSalary, avgMonthlyExpenses, thirteenthFirstMonth, otherDeductions = 0 } = params
+  const { positions, accountsBalance, cdiAnnual, ipcaAnnual, grossSalary, avgMonthlyExpenses, otherDeductions = 0, thirteenthReceived = 0, vacationThirdReceived = 0 } = params
 
   const now = new Date()
   const startMonth = now.getMonth()
@@ -89,6 +90,15 @@ export function projectNetWorth(params: ProjectionParams): ProjectionDataPoint[]
   let savingsBase = accountsBalance // tracks savings without CDI compounding
 
   const baseInvestments = positions.reduce((sum, pos) => sum + pos.amount, 0)
+
+  // Compute remaining bonuses for December
+  let thirteenthRemaining = 0
+  let vacationThirdRemaining = 0
+  if (grossSalary > 0) {
+    const bonuses = calculateAnnualBonuses(grossSalary)
+    thirteenthRemaining = Math.max(0, bonuses.thirteenthNet - thirteenthReceived)
+    vacationThirdRemaining = Math.max(0, bonuses.vacationThirdNet - vacationThirdReceived)
+  }
 
   // Current month + next 12 months
   for (let i = 0; i <= 12; i++) {
@@ -102,7 +112,7 @@ export function projectNetWorth(params: ProjectionParams): ProjectionDataPoint[]
     if (isCurrentMonth) {
       // Current month: balance already reflects partial income/expenses
       if (grossSalary > 0) {
-        const income = calculateMonthlyIncome(grossSalary, m, thirteenthFirstMonth, otherDeductions)
+        const income = calculateMonthlyIncome(grossSalary, otherDeductions)
         const advance = grossSalary * 0.5
         const remainder = income.netIncome - advance
         const today = now.getDate()
@@ -117,6 +127,11 @@ export function projectNetWorth(params: ProjectionParams): ProjectionDataPoint[]
           pendingIncome = 0 // all received
         }
 
+        // Add December bonuses if current month is December
+        if (m === 11) {
+          pendingIncome += thirteenthRemaining + vacationThirdRemaining
+        }
+
         const daysLeft = daysInMonth - today
         const remainingExpenses = avgMonthlyExpenses * (daysLeft / daysInMonth)
 
@@ -127,8 +142,12 @@ export function projectNetWorth(params: ProjectionParams): ProjectionDataPoint[]
     } else {
       // Future months: full income minus full expenses
       if (grossSalary > 0) {
-        const income = calculateMonthlyIncome(grossSalary, m, thirteenthFirstMonth, otherDeductions)
-        const contribution = income.netIncome - avgMonthlyExpenses
+        const income = calculateMonthlyIncome(grossSalary, otherDeductions)
+        let contribution = income.netIncome - avgMonthlyExpenses
+        // Add December bonuses
+        if (m === 11) {
+          contribution += thirteenthRemaining + vacationThirdRemaining
+        }
         savings += contribution
         savingsBase += contribution
       }

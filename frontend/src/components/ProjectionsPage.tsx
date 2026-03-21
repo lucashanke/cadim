@@ -7,9 +7,9 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { ChartContainer, ChartTooltip, type ChartConfig } from '@/components/ui/chart'
 import { Sheet, SheetTrigger, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet'
 import { Button } from '@/components/ui/button'
-import { TrendingUp, Percent, Wallet, PiggyBank, ChevronDown, ChevronRight, SlidersHorizontal, Plus, X } from 'lucide-react'
+import { TrendingUp, Percent, Wallet, PiggyBank, ChevronDown, ChevronRight, SlidersHorizontal, Plus, X, Gift } from 'lucide-react'
 import { projectNetWorth } from '@/lib/projections'
-import { calculateMonthlyIncome } from '@/lib/clt-taxes'
+import { calculateMonthlyIncome, calculateAnnualBonuses } from '@/lib/clt-taxes'
 import { getSalaryConfig, saveSalaryConfig, type SalaryDeduction } from '@/lib/storage'
 import type { InvestmentPosition, AccountsSummary, MarketRates, ConnectedItem, AverageExpensesResponse } from '@/types'
 import { DebugPanel } from './DebugPanel'
@@ -64,9 +64,17 @@ export function ProjectionsPage({ positions, accountsSummary, items, formatCurre
     const saved = getSalaryConfig()
     return saved ? String(saved.grossSalary) : ''
   })
-  const [thirteenthFirstMonth, setThirteenthFirstMonth] = useState<number>(() => {
+  const [thirteenthReceived, setThirteenthReceived] = useState<string>(() => {
     const saved = getSalaryConfig()
-    return saved?.thirteenthFirstMonth ?? 10
+    const currentYear = new Date().getFullYear()
+    if (saved?.bonusYear !== currentYear) return ''
+    return saved?.thirteenthReceived ? String(saved.thirteenthReceived) : ''
+  })
+  const [vacationThirdReceived, setVacationThirdReceived] = useState<string>(() => {
+    const saved = getSalaryConfig()
+    const currentYear = new Date().getFullYear()
+    if (saved?.bonusYear !== currentYear) return ''
+    return saved?.vacationThirdReceived ? String(saved.vacationThirdReceived) : ''
   })
   const [deductions, setDeductions] = useState<SalaryDeduction[]>(() => {
     const saved = getSalaryConfig()
@@ -121,9 +129,15 @@ export function ProjectionsPage({ positions, accountsSummary, items, formatCurre
   useEffect(() => {
     const val = parseFloat(grossSalary)
     if (val > 0) {
-      saveSalaryConfig({ grossSalary: val, thirteenthFirstMonth, deductions })
+      saveSalaryConfig({
+        grossSalary: val,
+        deductions,
+        thirteenthReceived: parseFloat(thirteenthReceived) || 0,
+        vacationThirdReceived: parseFloat(vacationThirdReceived) || 0,
+        bonusYear: new Date().getFullYear(),
+      })
     }
-  }, [grossSalary, thirteenthFirstMonth, deductions])
+  }, [grossSalary, deductions, thirteenthReceived, vacationThirdReceived])
 
   const cdiAnnual = parseFloat(cdiOverride) || 0
   const ipcaAnnual = parseFloat(ipcaOverride) || 0
@@ -131,6 +145,13 @@ export function ProjectionsPage({ positions, accountsSummary, items, formatCurre
   const grossSalaryNum = parseFloat(grossSalary) || 0
   const avgExpensesNum = parseFloat(avgExpenses) || 0
   const totalDeductions = deductions.reduce((sum, d) => sum + d.amount, 0)
+  const thirteenthReceivedNum = parseFloat(thirteenthReceived) || 0
+  const vacationThirdReceivedNum = parseFloat(vacationThirdReceived) || 0
+
+  const bonuses = useMemo(
+    () => grossSalaryNum > 0 ? calculateAnnualBonuses(grossSalaryNum) : null,
+    [grossSalaryNum],
+  )
 
   const projectionData = useMemo(
     () =>
@@ -141,10 +162,11 @@ export function ProjectionsPage({ positions, accountsSummary, items, formatCurre
         ipcaAnnual,
         grossSalary: grossSalaryNum,
         avgMonthlyExpenses: avgExpensesNum,
-        thirteenthFirstMonth,
         otherDeductions: totalDeductions,
+        thirteenthReceived: thirteenthReceivedNum,
+        vacationThirdReceived: vacationThirdReceivedNum,
       }),
-    [positions, accountsBalance, cdiAnnual, ipcaAnnual, grossSalaryNum, avgExpensesNum, thirteenthFirstMonth, totalDeductions],
+    [positions, accountsBalance, cdiAnnual, ipcaAnnual, grossSalaryNum, avgExpensesNum, totalDeductions, thirteenthReceivedNum, vacationThirdReceivedNum],
   )
 
   const currentTotal = projectionData[0]?.total ?? 0
@@ -155,7 +177,7 @@ export function ProjectionsPage({ positions, accountsSummary, items, formatCurre
   const growthPct = currentTotal > 0 ? ((endOfYearTotal - currentTotal) / currentTotal) * 100 : 0
 
   // Regular month income for display
-  const regularIncome = grossSalaryNum > 0 ? calculateMonthlyIncome(grossSalaryNum, 3, 10, totalDeductions) : null
+  const regularIncome = grossSalaryNum > 0 ? calculateMonthlyIncome(grossSalaryNum, totalDeductions) : null
   const monthlySurplus = regularIncome ? regularIncome.netIncome - avgExpensesNum : 0
 
   // Income schedule: month-by-month projected income
@@ -165,10 +187,8 @@ export function ProjectionsPage({ positions, accountsSummary, items, formatCurre
     const year = now.getFullYear()
     const rows: { month: string; monthIdx: number; gross: number; inss: number; irrf: number; otherDeductions: number; net: number; note: string }[] = []
     for (let m = now.getMonth(); m <= 11; m++) {
-      const income = calculateMonthlyIncome(grossSalaryNum, m, thirteenthFirstMonth, totalDeductions)
-      let note = ''
-      if (m === thirteenthFirstMonth) note = '13th 1st installment'
-      if (m === 11) note = '13th 2nd installment'
+      const income = calculateMonthlyIncome(grossSalaryNum, totalDeductions)
+      const note = m === 11 ? '+ 13th & vacation 1/3' : ''
       rows.push({
         month: `${MONTH_NAMES[m]} ${year}`,
         monthIdx: m,
@@ -181,7 +201,7 @@ export function ProjectionsPage({ positions, accountsSummary, items, formatCurre
       })
     }
     return rows
-  }, [grossSalaryNum, thirteenthFirstMonth, totalDeductions])
+  }, [grossSalaryNum, totalDeductions])
 
   // Growth attribution: contributions vs compound interest
   const growthAttribution = useMemo(() => {
@@ -189,15 +209,21 @@ export function ProjectionsPage({ positions, accountsSummary, items, formatCurre
     const totalGain = endOfYearTotal - currentTotal
     const now = new Date()
     let totalContributions = 0
-    for (let m = now.getMonth() + 1; m <= 11; m++) {
-      if (grossSalaryNum > 0) {
-        const income = calculateMonthlyIncome(grossSalaryNum, m, thirteenthFirstMonth, totalDeductions)
-        totalContributions += income.netIncome - avgExpensesNum
+    if (grossSalaryNum > 0) {
+      for (let m = now.getMonth() + 1; m <= 11; m++) {
+        const income = calculateMonthlyIncome(grossSalaryNum, totalDeductions)
+        let contribution = income.netIncome - avgExpensesNum
+        if (m === 11 && bonuses) {
+          const thirteenthRemaining = Math.max(0, bonuses.thirteenthNet - thirteenthReceivedNum)
+          const vacationThirdRemaining = Math.max(0, bonuses.vacationThirdNet - vacationThirdReceivedNum)
+          contribution += thirteenthRemaining + vacationThirdRemaining
+        }
+        totalContributions += contribution
       }
     }
     const fromInterest = totalGain - totalContributions
     return { totalGain, totalContributions, fromInterest }
-  }, [projectionData, endOfYearTotal, currentTotal, grossSalaryNum, avgExpensesNum, thirteenthFirstMonth, totalDeductions])
+  }, [projectionData, endOfYearTotal, currentTotal, grossSalaryNum, avgExpensesNum, totalDeductions, bonuses, thirteenthReceivedNum, vacationThirdReceivedNum])
 
   return (
     <div className="space-y-6">
@@ -311,21 +337,6 @@ export function ProjectionsPage({ positions, accountsSummary, items, formatCurre
                       onChange={(e) => setGrossSalary(e.target.value)}
                     />
                   </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="thirteenth-month" className="text-xs text-muted-foreground">
-                      13th Salary 1st Installment
-                    </Label>
-                    <select
-                      id="thirteenth-month"
-                      value={thirteenthFirstMonth}
-                      onChange={(e) => setThirteenthFirstMonth(Number(e.target.value))}
-                      className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                    >
-                      {MONTH_NAMES.map((name, idx) => (
-                        <option key={idx} value={idx}>{name}</option>
-                      ))}
-                    </select>
-                  </div>
                   {/* Other Deductions */}
                   <div className="space-y-2">
                     <Label className="text-xs text-muted-foreground">
@@ -433,6 +444,88 @@ export function ProjectionsPage({ positions, accountsSummary, items, formatCurre
                   </div>
                 )}
               </div>
+
+              {/* Additional Income (December bonuses) */}
+              {bonuses && grossSalaryNum > 0 && (
+                <>
+                  <div className="border-t border-border" />
+                  <div className="space-y-3">
+                    <h3 className="text-sm font-semibold flex items-center gap-2">
+                      <Gift className="h-3.5 w-3.5" />
+                      Additional Income
+                      <span className="text-[11px] font-normal text-muted-foreground ml-auto">December lump sums</span>
+                    </h3>
+                    {/* 13th Salary */}
+                    <div className="space-y-1.5">
+                      <div className="flex justify-between text-xs">
+                        <span className="font-medium">13th Salary</span>
+                        <span className="text-muted-foreground">Expected: {formatCurrency(bonuses.thirteenthNet, 'BRL')}</span>
+                      </div>
+                      <div className="space-y-1">
+                        <Label htmlFor="thirteenth-received" className="text-xs text-muted-foreground">
+                          Amount received (R$)
+                        </Label>
+                        <Input
+                          id="thirteenth-received"
+                          type="number"
+                          step="0.01"
+                          placeholder="0.00"
+                          value={thirteenthReceived}
+                          onChange={(e) => setThirteenthReceived(e.target.value)}
+                        />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="h-1.5 flex-1 rounded-full bg-muted overflow-hidden">
+                          <div
+                            className="h-full rounded-full bg-emerald-500 transition-all duration-300"
+                            style={{ width: `${Math.min(100, (thirteenthReceivedNum / bonuses.thirteenthNet) * 100)}%` }}
+                          />
+                        </div>
+                        <span className="text-[11px] tabular-nums text-muted-foreground w-8 text-right">{Math.min(100, Math.round((thirteenthReceivedNum / bonuses.thirteenthNet) * 100))}%</span>
+                      </div>
+                    </div>
+                    {/* Vacation 1/3 */}
+                    <div className="space-y-1.5">
+                      <div className="flex justify-between text-xs">
+                        <span className="font-medium">Vacation 1/3</span>
+                        <span className="text-muted-foreground">Expected: {formatCurrency(bonuses.vacationThirdNet, 'BRL')}</span>
+                      </div>
+                      <div className="space-y-1">
+                        <Label htmlFor="vacation-received" className="text-xs text-muted-foreground">
+                          Amount received (R$)
+                        </Label>
+                        <Input
+                          id="vacation-received"
+                          type="number"
+                          step="0.01"
+                          placeholder="0.00"
+                          value={vacationThirdReceived}
+                          onChange={(e) => setVacationThirdReceived(e.target.value)}
+                        />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="h-1.5 flex-1 rounded-full bg-muted overflow-hidden">
+                          <div
+                            className="h-full rounded-full bg-emerald-500 transition-all duration-300"
+                            style={{ width: `${Math.min(100, (vacationThirdReceivedNum / bonuses.vacationThirdNet) * 100)}%` }}
+                          />
+                        </div>
+                        <span className="text-[11px] tabular-nums text-muted-foreground w-8 text-right">{Math.min(100, Math.round((vacationThirdReceivedNum / bonuses.vacationThirdNet) * 100))}%</span>
+                      </div>
+                    </div>
+                    {/* Total remaining summary */}
+                    <div className="space-y-1.5 text-xs border-t border-border pt-3">
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Remaining for December</span>
+                        <span className="font-semibold">{formatCurrency(
+                          Math.max(0, bonuses.thirteenthNet - thirteenthReceivedNum) + Math.max(0, bonuses.vacationThirdNet - vacationThirdReceivedNum),
+                          'BRL',
+                        )}</span>
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
           </SheetContent>
         </Sheet>

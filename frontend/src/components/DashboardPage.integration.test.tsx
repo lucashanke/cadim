@@ -1,9 +1,10 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { server } from '../test/msw-server'
 import { ITEM_ID } from '../test/msw-handlers'
+import { renderWithRouter } from '../test/render'
 import App from '../App'
 
 vi.mock('react-pluggy-connect', () => ({
@@ -17,7 +18,7 @@ function seedItem() {
 describe('DashboardPage integration', () => {
   it('renders formatted account and investment values after loading', async () => {
     seedItem()
-    render(<App />)
+    renderWithRouter(<App />)
 
     // R$ 2.500,00 for accounts, R$ 5.000,00 for investments
     await waitFor(() => {
@@ -36,7 +37,7 @@ describe('DashboardPage integration', () => {
       )
     )
 
-    render(<App />)
+    renderWithRouter(<App />)
 
     await waitFor(() => {
       expect(screen.getByText('Sync Error')).toBeInTheDocument()
@@ -59,7 +60,7 @@ describe('DashboardPage integration', () => {
     )
 
     const user = userEvent.setup()
-    render(<App />)
+    renderWithRouter(<App />)
 
     await waitFor(() => screen.getByRole('button', { name: /retry sync/i }))
     await user.click(screen.getByRole('button', { name: /retry sync/i }))
@@ -77,7 +78,7 @@ describe('DashboardPage integration', () => {
       )
     )
 
-    render(<App />)
+    renderWithRouter(<App />)
 
     await waitFor(() => {
       expect(screen.getByText('Investments Sync Error')).toBeInTheDocument()
@@ -95,7 +96,7 @@ describe('DashboardPage integration', () => {
     )
 
     const user = userEvent.setup()
-    render(<App />)
+    renderWithRouter(<App />)
 
     await waitFor(() => screen.getByRole('button', { name: /connect bank/i }))
     await user.click(screen.getByRole('button', { name: /connect bank/i }))

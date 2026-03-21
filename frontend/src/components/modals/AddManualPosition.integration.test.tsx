@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { renderWithRouter } from '../../test/render'
 import App from '../../App'
 
 vi.mock('react-pluggy-connect', () => ({
@@ -9,11 +10,11 @@ vi.mock('react-pluggy-connect', () => ({
 
 async function openAddModal() {
   const user = userEvent.setup()
-  render(<App />)
+  renderWithRouter(<App />)
 
   // Navigate to investments page
-  await waitFor(() => screen.getByRole('button', { name: /^investments$/i }))
-  await user.click(screen.getByRole('button', { name: /^investments$/i }))
+  await waitFor(() => screen.getByRole('link', { name: /^investments$/i }))
+  await user.click(screen.getByRole('link', { name: /^investments$/i }))
 
   // Wait for investments page to be shown (Add Position button appears in both states)
   await waitFor(() => screen.getByRole('button', { name: /add position/i }))

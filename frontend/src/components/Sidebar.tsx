@@ -1,4 +1,5 @@
 import { Activity, LayoutDashboard, TrendingUp, CreditCard, Building, LineChart } from 'lucide-react'
+import { Link, useLocation } from 'react-router-dom'
 import { Badge } from '@/components/ui/badge'
 import { Logo } from '@/components/Logo'
 import {
@@ -14,14 +15,10 @@ import {
   SidebarMenuItem,
   SidebarRail,
 } from '@/components/ui/sidebar'
-import type { Page } from '@/types'
 
-interface AppSidebarProps {
-  currentPage: Page
-  setCurrentPage: (page: Page) => void
-}
+export function AppSidebar() {
+  const { pathname } = useLocation()
 
-export function AppSidebar({ currentPage, setCurrentPage }: AppSidebarProps) {
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader className="h-14 justify-center border-b border-sidebar-border">
@@ -39,25 +36,25 @@ export function AppSidebar({ currentPage, setCurrentPage }: AppSidebarProps) {
           <SidebarGroupContent>
             <SidebarMenu>
               <SidebarMenuItem>
-                <SidebarMenuButton isActive={currentPage === 'dashboard'} tooltip="Dashboard" onClick={() => setCurrentPage('dashboard')}>
+                <SidebarMenuButton isActive={pathname === '/'} tooltip="Dashboard" render={<Link to="/" />}>
                   <LayoutDashboard />
                   <span>Dashboard</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>
-                <SidebarMenuButton isActive={currentPage === 'credit-cards'} tooltip="Credit Cards" onClick={() => setCurrentPage('credit-cards')}>
+                <SidebarMenuButton isActive={pathname === '/credit-cards'} tooltip="Credit Cards" render={<Link to="/credit-cards" />}>
                   <CreditCard />
                   <span>Credit Cards</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>
-                <SidebarMenuButton isActive={currentPage === 'investments'} tooltip="Investments" onClick={() => setCurrentPage('investments')}>
+                <SidebarMenuButton isActive={pathname === '/investments'} tooltip="Investments" render={<Link to="/investments" />}>
                   <TrendingUp />
                   <span>Investments</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>
-                <SidebarMenuButton isActive={currentPage === 'projections'} tooltip="Projections" onClick={() => setCurrentPage('projections')}>
+                <SidebarMenuButton isActive={pathname === '/projections'} tooltip="Projections" render={<Link to="/projections" />}>
                   <LineChart />
                   <span>Projections</span>
                 </SidebarMenuButton>

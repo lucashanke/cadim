@@ -1,9 +1,10 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { server } from '../test/msw-server'
 import { ITEM_ID, samplePositions } from '../test/msw-handlers'
+import { renderWithRouter } from '../test/render'
 import App from '../App'
 
 vi.mock('react-pluggy-connect', () => ({
@@ -16,8 +17,8 @@ function seedItem() {
 
 async function navigateToInvestments() {
   const user = userEvent.setup()
-  await waitFor(() => screen.getByRole('button', { name: /^investments$/i }))
-  await user.click(screen.getByRole('button', { name: /^investments$/i }))
+  await waitFor(() => screen.getByRole('link', { name: /^investments$/i }))
+  await user.click(screen.getByRole('link', { name: /^investments$/i }))
   // Add Position button appears in both empty and non-empty states
   await waitFor(() => screen.getByRole('button', { name: /add position/i }))
   return user
@@ -25,7 +26,7 @@ async function navigateToInvestments() {
 
 describe('InvestmentsPage integration', () => {
   it('renders the empty state when no items and no positions', async () => {
-    render(<App />)
+    renderWithRouter(<App />)
 
     await navigateToInvestments()
 
@@ -34,7 +35,7 @@ describe('InvestmentsPage integration', () => {
 
   it('renders table with all positions from the API', async () => {
     seedItem()
-    render(<App />)
+    renderWithRouter(<App />)
 
     await navigateToInvestments()
 
@@ -52,7 +53,7 @@ describe('InvestmentsPage integration', () => {
       )
     )
 
-    render(<App />)
+    renderWithRouter(<App />)
     await navigateToInvestments()
 
     await waitFor(() => {
@@ -72,7 +73,7 @@ describe('InvestmentsPage integration', () => {
     }
     document.cookie = `manual_investment_positions=${encodeURIComponent(JSON.stringify([manualPos]))}; path=/`
 
-    render(<App />)
+    renderWithRouter(<App />)
     await navigateToInvestments()
 
     await waitFor(() => {
@@ -84,7 +85,7 @@ describe('InvestmentsPage integration', () => {
 
   it('clicking a sort column sorts the table ascending', async () => {
     seedItem()
-    render(<App />)
+    renderWithRouter(<App />)
     const user = await navigateToInvestments()
 
     await waitFor(() => screen.getByText('CDB Banco X'))
@@ -101,7 +102,7 @@ describe('InvestmentsPage integration', () => {
 
   it('clicking a sorted column again sorts descending', async () => {
     seedItem()
-    render(<App />)
+    renderWithRouter(<App />)
     const user = await navigateToInvestments()
 
     await waitFor(() => screen.getByText('CDB Banco X'))
@@ -118,7 +119,7 @@ describe('InvestmentsPage integration', () => {
 
   it('non-manual positions have no action buttons', async () => {
     seedItem()
-    render(<App />)
+    renderWithRouter(<App />)
     await navigateToInvestments()
 
     await waitFor(() => screen.getByText('CDB Banco X'))
@@ -132,7 +133,7 @@ describe('InvestmentsPage integration', () => {
   })
 
   it('Add Position button is shown in empty state', async () => {
-    render(<App />)
+    renderWithRouter(<App />)
     await navigateToInvestments()
 
     // navigateToInvestments already asserts Add Position exists

@@ -24,7 +24,15 @@ export interface SalaryDeduction {
   amount: number
 }
 
-export function getSalaryConfig(): { grossSalary: number; thirteenthFirstMonth?: number; deductions?: SalaryDeduction[] } | null {
+export interface SalaryConfig {
+  grossSalary: number
+  deductions?: SalaryDeduction[]
+  thirteenthReceived?: number
+  vacationThirdReceived?: number
+  bonusYear?: number
+}
+
+export function getSalaryConfig(): SalaryConfig | null {
   try {
     const match = document.cookie.match(new RegExp(`(?:^|; )${SALARY_CONFIG_COOKIE}=([^;]*)`))
     if (!match) return null
@@ -32,7 +40,7 @@ export function getSalaryConfig(): { grossSalary: number; thirteenthFirstMonth?:
   } catch { return null }
 }
 
-export function saveSalaryConfig(config: { grossSalary: number; thirteenthFirstMonth?: number; deductions?: SalaryDeduction[] }) {
+export function saveSalaryConfig(config: SalaryConfig) {
   try {
     document.cookie = `${SALARY_CONFIG_COOKIE}=${encodeURIComponent(JSON.stringify(config))}; path=/; max-age=31536000; SameSite=Lax`
   } catch (e) { console.warn('Could not save salary config', e) }

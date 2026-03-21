@@ -1,10 +1,11 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { server } from './test/msw-server'
 import { ITEM_ID, sampleCreditCards, sampleTransactions } from './test/msw-handlers'
 import { STORAGE_KEY } from './lib/storage'
+import { renderWithRouter } from './test/render'
 import App from './App'
 
 vi.mock('react-pluggy-connect', () => ({
@@ -13,25 +14,25 @@ vi.mock('react-pluggy-connect', () => ({
 
 describe('App integration', () => {
   it('renders the dashboard page by default', async () => {
-    render(<App />)
+    renderWithRouter(<App />)
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: 'Dashboard' })).toBeInTheDocument()
     })
   })
 
-  it('shows Dashboard nav button in the sidebar', async () => {
-    render(<App />)
+  it('shows Dashboard nav link in the sidebar', async () => {
+    renderWithRouter(<App />)
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /dashboard/i })).toBeInTheDocument()
+      expect(screen.getByRole('link', { name: /dashboard/i })).toBeInTheDocument()
     })
   })
 
   it('switches to investments page when clicking Investments in sidebar', async () => {
     const user = userEvent.setup()
-    render(<App />)
+    renderWithRouter(<App />)
 
-    await waitFor(() => screen.getByRole('button', { name: /^investments$/i }))
-    await user.click(screen.getByRole('button', { name: /^investments$/i }))
+    await waitFor(() => screen.getByRole('link', { name: /^investments$/i }))
+    await user.click(screen.getByRole('link', { name: /^investments$/i }))
 
     // Empty state shown when no items or positions
     await waitFor(() => {
@@ -41,10 +42,10 @@ describe('App integration', () => {
 
   it('switches to credit cards page when clicking Credit Cards in sidebar', async () => {
     const user = userEvent.setup()
-    render(<App />)
+    renderWithRouter(<App />)
 
-    await waitFor(() => screen.getByRole('button', { name: /credit cards/i }))
-    await user.click(screen.getByRole('button', { name: /credit cards/i }))
+    await waitFor(() => screen.getByRole('link', { name: /credit cards/i }))
+    await user.click(screen.getByRole('link', { name: /credit cards/i }))
 
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: /credit cards/i })).toBeInTheDocument()
@@ -54,10 +55,10 @@ describe('App integration', () => {
   it('renders transaction cycle tabs when items are connected', async () => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify([{ id: ITEM_ID, name: 'Nubank' }]))
     const user = userEvent.setup()
-    render(<App />)
+    renderWithRouter(<App />)
 
-    await waitFor(() => screen.getByRole('button', { name: /credit cards/i }))
-    await user.click(screen.getByRole('button', { name: /credit cards/i }))
+    await waitFor(() => screen.getByRole('link', { name: /credit cards/i }))
+    await user.click(screen.getByRole('link', { name: /credit cards/i }))
 
     await waitFor(() => {
       expect(screen.getAllByText(sampleTransactions.results[0].description).length).toBeGreaterThan(0)
@@ -69,10 +70,10 @@ describe('App integration', () => {
   it('renders transactions from MSW mock data on credit cards page', async () => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify([{ id: ITEM_ID, name: 'Nubank' }]))
     const user = userEvent.setup()
-    render(<App />)
+    renderWithRouter(<App />)
 
-    await waitFor(() => screen.getByRole('button', { name: /credit cards/i }))
-    await user.click(screen.getByRole('button', { name: /credit cards/i }))
+    await waitFor(() => screen.getByRole('link', { name: /credit cards/i }))
+    await user.click(screen.getByRole('link', { name: /credit cards/i }))
 
     await waitFor(() => {
       expect(screen.getAllByText(sampleTransactions.results[0].description).length).toBeGreaterThan(0)
@@ -87,7 +88,7 @@ describe('App integration', () => {
       http.get('/api/health', () => HttpResponse.json({ error: 'down' }, { status: 500 }))
     )
 
-    render(<App />)
+    renderWithRouter(<App />)
 
     await waitFor(() => {
       expect(screen.getByRole('alert')).toBeInTheDocument()

@@ -87,13 +87,13 @@ pub struct PluggyCardAccountsResponse {
     pub results: Vec<PluggyCardAccount>,
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize, serde::Serialize)]
 pub struct PluggyCreditCardMetadata {
     #[serde(rename = "cardNumber", default)]
     pub card_number: Option<String>,
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize, serde::Serialize)]
 pub struct PluggyTransaction {
     pub id: String,
     pub description: String,

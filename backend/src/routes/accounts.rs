@@ -115,6 +115,8 @@ pub async fn average_expenses_multi(
             .pluggy_client
             .get_all_transactions(account_id, Some(&from_str), Some(&to_str))
             .await?;
+        let pretty = serde_json::to_string_pretty(&transactions).unwrap_or_default();
+        tracing::info!(account_id = %account_id, "[expenses] transactions:\n{}", pretty);
 
         for tx in transactions {
             // Only negative amounts (outflows)
@@ -148,6 +150,7 @@ pub async fn average_expenses_multi(
     } else {
         0.0
     };
+
 
     let mut monthly_breakdown: Vec<ExpenseMonthBreakdown> = monthly_data
         .into_iter()

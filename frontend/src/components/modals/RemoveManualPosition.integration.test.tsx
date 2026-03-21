@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { renderWithRouter } from '../../test/render'
 import App from '../../App'
 
 vi.mock('react-pluggy-connect', () => ({
@@ -22,11 +23,11 @@ describe('RemoveManualPosition integration', () => {
   it('removes the position from the table after clicking delete', async () => {
     const user = userEvent.setup()
     seedManualPosition()
-    render(<App />)
+    renderWithRouter(<App />)
 
-    await waitFor(() => screen.getByRole('button', { name: /investments/i }))
-    await user.click(screen.getByRole('button', { name: /investments/i }))
-    await waitFor(() => screen.getByText('Portfolio'))
+    await waitFor(() => screen.getByRole('link', { name: /investments/i }))
+    await user.click(screen.getByRole('link', { name: /investments/i }))
+    await waitFor(() => screen.getByRole('button', { name: /add position/i }))
 
     await waitFor(() => screen.getByText('Manual'))
 
@@ -45,11 +46,11 @@ describe('RemoveManualPosition integration', () => {
   it('updates the cookie after removing the position', async () => {
     const user = userEvent.setup()
     seedManualPosition()
-    render(<App />)
+    renderWithRouter(<App />)
 
-    await waitFor(() => screen.getByRole('button', { name: /investments/i }))
-    await user.click(screen.getByRole('button', { name: /investments/i }))
-    await waitFor(() => screen.getByText('Portfolio'))
+    await waitFor(() => screen.getByRole('link', { name: /investments/i }))
+    await user.click(screen.getByRole('link', { name: /investments/i }))
+    await waitFor(() => screen.getByRole('button', { name: /add position/i }))
     await waitFor(() => screen.getByText('Manual'))
 
     const rows = screen.getAllByRole('row')

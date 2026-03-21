@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { renderWithRouter } from '../../test/render'
 import App from '../../App'
 
 vi.mock('react-pluggy-connect', () => ({
@@ -21,11 +22,11 @@ function seedManualPosition() {
 async function openEditModal() {
   const user = userEvent.setup()
   seedManualPosition()
-  render(<App />)
+  renderWithRouter(<App />)
 
   // Navigate to investments
-  await waitFor(() => screen.getByRole('button', { name: /^investments$/i }))
-  await user.click(screen.getByRole('button', { name: /^investments$/i }))
+  await waitFor(() => screen.getByRole('link', { name: /^investments$/i }))
+  await user.click(screen.getByRole('link', { name: /^investments$/i }))
 
   // Wait for Manual badge to appear (manual position is visible)
   await waitFor(() => screen.getByText('Manual'))

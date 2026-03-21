@@ -1,5 +1,5 @@
 import { projectPosition, projectNetWorth } from './projections'
-import { calculateMonthlyIncome } from './clt-taxes'
+import { calculateMonthlyIncome, calculateAnnualBonuses } from './clt-taxes'
 import type { InvestmentPosition } from '@/types'
 
 function makePosition(overrides: Partial<InvestmentPosition> = {}): InvestmentPosition {
@@ -121,10 +121,7 @@ describe('projectPosition', () => {
 })
 
 describe('projectNetWorth', () => {
-  it('returns data points from current month through December', () => {
-    const now = new Date()
-    const expectedCount = 12 - now.getMonth()
-
+  it('returns 13 data points (current month + 12)', () => {
     const points = projectNetWorth({
       positions: [],
       accountsBalance: 10000,
@@ -134,13 +131,11 @@ describe('projectNetWorth', () => {
       ...defaultSalaryParams,
     })
 
-    expect(points).toHaveLength(expectedCount)
-    // First point: balance + pending income - remaining expenses + CDI
+    expect(points).toHaveLength(13)
+    // First point: balance + pending income - remaining expenses (no interest)
     expect(points[0].total).toBeGreaterThan(9000)
     // Last point should show CDI growth on savings
-    if (points.length > 1) {
-      expect(points[points.length - 1].total).toBeGreaterThan(points[0].total)
-    }
+    expect(points[points.length - 1].total).toBeGreaterThan(points[0].total)
   })
 
   it('includes investment growth in totals', () => {
@@ -241,12 +236,13 @@ describe('projectNetWorth', () => {
       avgMonthlyExpenses: 0,
     })
 
-    // Savings base stays constant, compound interest grows
+    // Current month: no interest applied
     expect(points[0].savings).toBe(10000)
-    expect(points[0].compoundInterest).toBeGreaterThan(0)
+    expect(points[0].compoundInterest).toBe(0)
     if (points.length > 1) {
+      // Future months: interest compounds
       expect(points[1].savings).toBe(10000)
-      expect(points[1].compoundInterest).toBeGreaterThan(points[0].compoundInterest)
+      expect(points[1].compoundInterest).toBeGreaterThan(0)
       expect(points[1].total).toBeGreaterThan(points[0].total)
     }
   })
@@ -266,7 +262,7 @@ describe('projectNetWorth', () => {
       avgMonthlyExpenses: 0,
     })
 
-    const income = calculateMonthlyIncome(10000, now.getMonth())
+    const income = calculateMonthlyIncome(10000)
     const advance = 10000 * 0.5
     const remainder = income.netIncome - advance
 
@@ -283,44 +279,88 @@ describe('projectNetWorth', () => {
     expect(points[0].savings).toBeCloseTo(expectedPending, 0)
   })
 
-  it('November has higher income from 13th 1st installment', () => {
+  it('December has higher income from bonuses', () => {
     const now = new Date()
-    // Only test if we have November in our projection range
     if (now.getMonth() > 10) return
 
     const points = projectNetWorth({
       positions: [],
       accountsBalance: 0,
-
       cdiAnnual: 0,
       ipcaAnnual: 0,
       grossSalary: 10000,
       avgMonthlyExpenses: 5000,
     })
 
-    // Find October and November points
+    // Find a regular future month and December
     const octIdx = 9 - now.getMonth()
-    const novIdx = 10 - now.getMonth()
-    if (octIdx > 0 && novIdx < points.length) {
+    const decIdx = 11 - now.getMonth()
+    if (octIdx > 0 && decIdx < points.length) {
       const octSurplus = points[octIdx].savings - points[octIdx - 1].savings
-      const novSurplus = points[novIdx].savings - points[novIdx - 1].savings
-      // November surplus should be bigger due to 13th salary 1st installment
-      expect(novSurplus).toBeGreaterThan(octSurplus)
+      const decSurplus = points[decIdx].savings - points[decIdx - 1].savings
+      // December surplus should be bigger due to bonuses
+      expect(decSurplus).toBeGreaterThan(octSurplus)
     }
   })
 
-  it('December has higher income from 13th 2nd installment', () => {
+  it('December includes bonuses minus received amounts', () => {
     const now = new Date()
     if (now.getMonth() > 10) return
+
+    const gross = 10000
+    const bonuses = calculateAnnualBonuses(gross)
+
+    // No received amounts — full bonuses
+    const pointsFull = projectNetWorth({
+      positions: [],
+      accountsBalance: 0,
+      cdiAnnual: 0,
+      ipcaAnnual: 0,
+      grossSalary: gross,
+      avgMonthlyExpenses: 0,
+      thirteenthReceived: 0,
+      vacationThirdReceived: 0,
+    })
+
+    // Partial received amounts
+    const received13 = 3000
+    const receivedVac = 1000
+    const pointsPartial = projectNetWorth({
+      positions: [],
+      accountsBalance: 0,
+      cdiAnnual: 0,
+      ipcaAnnual: 0,
+      grossSalary: gross,
+      avgMonthlyExpenses: 0,
+      thirteenthReceived: received13,
+      vacationThirdReceived: receivedVac,
+    })
+
+    const decIdx = 11 - now.getMonth()
+    if (decIdx > 0 && decIdx < pointsFull.length) {
+      // The difference in December savings should equal the received amounts
+      const fullDecSavings = pointsFull[decIdx].savings
+      const partialDecSavings = pointsPartial[decIdx].savings
+      expect(fullDecSavings - partialDecSavings).toBeCloseTo(received13 + receivedVac, 0)
+    }
+  })
+
+  it('fully received bonuses: December equals a regular month', () => {
+    const now = new Date()
+    if (now.getMonth() > 10) return
+
+    const gross = 10000
+    const bonuses = calculateAnnualBonuses(gross)
 
     const points = projectNetWorth({
       positions: [],
       accountsBalance: 0,
-
       cdiAnnual: 0,
       ipcaAnnual: 0,
-      grossSalary: 10000,
-      avgMonthlyExpenses: 5000,
+      grossSalary: gross,
+      avgMonthlyExpenses: 0,
+      thirteenthReceived: bonuses.thirteenthNet,
+      vacationThirdReceived: bonuses.vacationThirdNet,
     })
 
     const octIdx = 9 - now.getMonth()
@@ -328,8 +368,8 @@ describe('projectNetWorth', () => {
     if (octIdx > 0 && decIdx < points.length) {
       const octSurplus = points[octIdx].savings - points[octIdx - 1].savings
       const decSurplus = points[decIdx].savings - points[decIdx - 1].savings
-      // December surplus should be bigger due to 13th salary 2nd installment
-      expect(decSurplus).toBeGreaterThan(octSurplus)
+      // December should be the same as any regular month
+      expect(decSurplus).toBeCloseTo(octSurplus, 0)
     }
   })
 })

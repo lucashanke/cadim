@@ -1,4 +1,4 @@
-import { calculateINSS, calculateIRRF, calculateNetSalary, calculateMonthlyIncome } from './clt-taxes'
+import { calculateINSS, calculateIRRF, calculateNetSalary, calculateMonthlyIncome, calculateAnnualBonuses } from './clt-taxes'
 
 describe('calculateINSS', () => {
   it('calculates for income in first bracket', () => {
@@ -89,40 +89,20 @@ describe('calculateNetSalary', () => {
 })
 
 describe('calculateMonthlyIncome', () => {
-  it('includes vacation 1/3 spread in regular month', () => {
+  it('calculates regular month income (gross minus taxes and deductions)', () => {
     const gross = 10000
-    const result = calculateMonthlyIncome(gross, 3) // April
-    // grossBeforeTax should include vacation spread
-    expect(result.grossBeforeTax).toBeCloseTo(gross + gross / 36, 2)
+    const result = calculateMonthlyIncome(gross)
+    // grossBeforeTax should be the plain gross salary (no vacation spread)
+    expect(result.grossBeforeTax).toBe(gross)
     expect(result.inss).toBeGreaterThan(0)
     expect(result.irrf).toBeGreaterThan(0)
-    expect(result.netIncome).toBeLessThan(result.grossBeforeTax)
-  })
-
-  it('adds 13th 1st installment (untaxed) in November', () => {
-    const gross = 10000
-    const regularMonth = calculateMonthlyIncome(gross, 3) // April
-    const november = calculateMonthlyIncome(gross, 10) // November
-
-    // November should have extra gross * 0.5 on top of regular net
-    expect(november.netIncome).toBeCloseTo(regularMonth.netIncome + gross * 0.5, 2)
-  })
-
-  it('adds 13th 2nd installment (taxed) in December', () => {
-    const gross = 10000
-    const regularMonth = calculateMonthlyIncome(gross, 3)
-    const december = calculateMonthlyIncome(gross, 11)
-
-    // December should have: regular net + (net 13th - 0.5 * gross)
-    const thirteenthNet = calculateNetSalary(gross)
-    const secondInstallment = thirteenthNet - gross * 0.5
-    expect(december.netIncome).toBeCloseTo(regularMonth.netIncome + secondInstallment, 2)
+    expect(result.netIncome).toBeCloseTo(gross - result.inss - result.irrf, 2)
   })
 
   it('subtracts other deductions from net income', () => {
     const gross = 10000
-    const withoutDeductions = calculateMonthlyIncome(gross, 3)
-    const withDeductions = calculateMonthlyIncome(gross, 3, 10, 500)
+    const withoutDeductions = calculateMonthlyIncome(gross)
+    const withDeductions = calculateMonthlyIncome(gross, 500)
 
     expect(withDeductions.otherDeductions).toBe(500)
     expect(withDeductions.netIncome).toBeCloseTo(withoutDeductions.netIncome - 500, 2)
@@ -130,12 +110,34 @@ describe('calculateMonthlyIncome', () => {
     expect(withDeductions.inss).toBeCloseTo(withoutDeductions.inss, 2)
     expect(withDeductions.irrf).toBeCloseTo(withoutDeductions.irrf, 2)
   })
+})
 
-  it('returns consistent INSS/IRRF for regular months', () => {
-    const gross = 8000
-    const jan = calculateMonthlyIncome(gross, 0)
-    const jun = calculateMonthlyIncome(gross, 5)
-    expect(jan.inss).toBeCloseTo(jun.inss, 2)
-    expect(jan.irrf).toBeCloseTo(jun.irrf, 2)
+describe('calculateAnnualBonuses', () => {
+  it('calculates 13th salary net correctly', () => {
+    const gross = 10000
+    const bonuses = calculateAnnualBonuses(gross)
+    expect(bonuses.thirteenthGross).toBe(gross)
+    expect(bonuses.thirteenthNet).toBe(calculateNetSalary(gross))
+  })
+
+  it('calculates vacation 1/3 net correctly', () => {
+    const gross = 10000
+    const bonuses = calculateAnnualBonuses(gross)
+    const vacGross = Math.round((gross / 3) * 100) / 100
+    expect(bonuses.vacationThirdGross).toBeCloseTo(vacGross, 2)
+    expect(bonuses.vacationThirdNet).toBe(calculateNetSalary(vacGross))
+  })
+
+  it('totalNet equals thirteenthNet + vacationThirdNet', () => {
+    const bonuses = calculateAnnualBonuses(10000)
+    expect(bonuses.totalNet).toBeCloseTo(bonuses.thirteenthNet + bonuses.vacationThirdNet, 2)
+  })
+
+  it('handles low salary (below tax thresholds)', () => {
+    const bonuses = calculateAnnualBonuses(1500)
+    expect(bonuses.thirteenthNet).toBeGreaterThan(0)
+    expect(bonuses.thirteenthNet).toBeLessThan(1500)
+    expect(bonuses.vacationThirdNet).toBeGreaterThan(0)
+    expect(bonuses.vacationThirdNet).toBeLessThan(500)
   })
 })

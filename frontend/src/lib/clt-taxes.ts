@@ -53,41 +53,52 @@ export function calculateNetSalary(gross: number): number {
   return Math.round((gross - inss - irrf) * 100) / 100
 }
 
+export interface AnnualBonuses {
+  thirteenthGross: number
+  thirteenthNet: number
+  vacationThirdGross: number
+  vacationThirdNet: number
+  totalNet: number
+}
+
 /**
- * Calculate monthly income for a CLT worker.
+ * Calculate monthly income for a CLT worker (regular month only — no bonuses).
  * @param grossSalary - monthly gross salary
- * @param month - 0-indexed month (0 = January, 11 = December)
- * @param thirteenthFirstMonth - 0-indexed month for 13th 1st installment (default 10 = November)
  * @param otherDeductions - total of other monthly deductions (e.g. union contributions)
  */
-export function calculateMonthlyIncome(grossSalary: number, month: number, thirteenthFirstMonth: number = 10, otherDeductions: number = 0): MonthlyIncome {
-  // Vacation 1/3 spread evenly across 12 months
-  const vacationSpread = grossSalary / 36
-  const monthlyGross = grossSalary + vacationSpread
-
-  const inss = calculateINSS(monthlyGross)
-  const irrf = calculateIRRF(monthlyGross - inss)
-  let netIncome = monthlyGross - inss - irrf - otherDeductions
-
-  // 13th salary 1st installment — untaxed (gross * 0.5)
-  if (month === thirteenthFirstMonth) {
-    netIncome += grossSalary * 0.5
-  }
-
-  // December (month 11): 13th salary 2nd installment — taxed on full 13th
-  if (month === 11) {
-    const thirteenthINSS = calculateINSS(grossSalary)
-    const thirteenthIRRF = calculateIRRF(grossSalary - thirteenthINSS)
-    const thirteenthNet = grossSalary - thirteenthINSS - thirteenthIRRF
-    // 2nd installment = full net 13th minus already-paid 1st installment (0.5 * gross)
-    netIncome += thirteenthNet - grossSalary * 0.5
-  }
+export function calculateMonthlyIncome(grossSalary: number, otherDeductions: number = 0): MonthlyIncome {
+  const inss = calculateINSS(grossSalary)
+  const irrf = calculateIRRF(grossSalary - inss)
+  const netIncome = grossSalary - inss - irrf - otherDeductions
 
   return {
-    grossBeforeTax: monthlyGross,
+    grossBeforeTax: grossSalary,
     inss: Math.round(inss * 100) / 100,
     irrf: Math.round(irrf * 100) / 100,
     otherDeductions: Math.round(otherDeductions * 100) / 100,
     netIncome: Math.round(netIncome * 100) / 100,
+  }
+}
+
+/**
+ * Calculate annual bonuses (13th salary + vacation 1/3) as December lump sums.
+ */
+export function calculateAnnualBonuses(grossSalary: number): AnnualBonuses {
+  const thirteenthGross = grossSalary
+  const thirteenthINSS = calculateINSS(thirteenthGross)
+  const thirteenthIRRF = calculateIRRF(thirteenthGross - thirteenthINSS)
+  const thirteenthNet = Math.round((thirteenthGross - thirteenthINSS - thirteenthIRRF) * 100) / 100
+
+  const vacationThirdGross = Math.round((grossSalary / 3) * 100) / 100
+  const vacationThirdINSS = calculateINSS(vacationThirdGross)
+  const vacationThirdIRRF = calculateIRRF(vacationThirdGross - vacationThirdINSS)
+  const vacationThirdNet = Math.round((vacationThirdGross - vacationThirdINSS - vacationThirdIRRF) * 100) / 100
+
+  return {
+    thirteenthGross,
+    thirteenthNet,
+    vacationThirdGross,
+    vacationThirdNet,
+    totalNet: Math.round((thirteenthNet + vacationThirdNet) * 100) / 100,
   }
 }

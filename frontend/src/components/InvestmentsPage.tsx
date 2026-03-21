@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Skeleton } from '@/components/ui/skeleton'
-import { AlertCircle, PlusCircle, BarChart3, Pencil, Trash2, ChevronUp, ChevronDown, Wallet, Banknote, TrendingUp } from 'lucide-react'
+import { AlertCircle, PlusCircle, BarChart3, Pencil, Trash2, ChevronUp, ChevronDown, Wallet, Banknote, TrendingUp, CalendarClock } from 'lucide-react'
 import { INVESTMENT_TYPE_LABELS, INVESTMENT_TYPE_COLORS, SUBTYPE_LABELS } from '@/constants/investments'
 import { colorBadgeStyle } from '@/lib/color'
 import { formatRate } from '@/lib/investments'
@@ -83,6 +83,36 @@ export function InvestmentsPage({
       .reduce((sum, p) => sum + p.amount, 0)
     return { total, fixedIncome, variableIncome, manual }
   }, [positions, manualPositionIds])
+
+  const maturityGroups = useMemo(() => {
+    const now = new Date()
+    const groups: { label: string; total: number; count: number }[] = [
+      { label: 'Matured', total: 0, count: 0 },
+      { label: '< 6 months', total: 0, count: 0 },
+      { label: '6–12 months', total: 0, count: 0 },
+      { label: '1–2 years', total: 0, count: 0 },
+      { label: '2–5 years', total: 0, count: 0 },
+      { label: '5+ years', total: 0, count: 0 },
+      { label: 'No due date', total: 0, count: 0 },
+    ]
+    for (const p of positions) {
+      if (!p.due_date) {
+        groups[6].total += p.amount
+        groups[6].count++
+        continue
+      }
+      const due = new Date(p.due_date)
+      const diffMs = due.getTime() - now.getTime()
+      const diffMonths = diffMs / (1000 * 60 * 60 * 24 * 30.44)
+      if (diffMonths <= 0) { groups[0].total += p.amount; groups[0].count++ }
+      else if (diffMonths <= 6) { groups[1].total += p.amount; groups[1].count++ }
+      else if (diffMonths <= 12) { groups[2].total += p.amount; groups[2].count++ }
+      else if (diffMonths <= 24) { groups[3].total += p.amount; groups[3].count++ }
+      else if (diffMonths <= 60) { groups[4].total += p.amount; groups[4].count++ }
+      else { groups[5].total += p.amount; groups[5].count++ }
+    }
+    return groups.filter(g => g.count > 0)
+  }, [positions])
 
   const subtypesByType = positions.reduce((acc, p) => {
     if (!acc[p.investment_type]) acc[p.investment_type] = {}
@@ -300,6 +330,46 @@ export function InvestmentsPage({
                     )
                   })}
                 </div>
+              </div>
+            </CardContent>
+          </Card>
+        )
+      })()}
+
+      {maturityGroups.length > 0 && (() => {
+        const maxTotal = Math.max(...maturityGroups.map(g => g.total))
+        const total = positions.reduce((s, p) => s + p.amount, 0)
+        return (
+          <Card className="flex-1 min-w-[320px]">
+            <CardHeader className="px-5 pt-5 pb-3">
+              <CardTitle className="text-base text-foreground flex items-center gap-2">
+                <CalendarClock className="h-4 w-4 text-muted-foreground" />
+                Maturity Breakdown
+              </CardTitle>
+              <CardDescription className="text-xs text-muted-foreground">
+                Portfolio breakdown by due date
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="px-5 pb-6">
+              <div className="flex flex-col gap-3">
+                {maturityGroups.map((g) => {
+                  const pct = total > 0 ? ((g.total / total) * 100) : 0
+                  const barWidth = maxTotal > 0 ? (g.total / maxTotal) * 100 : 0
+                  return (
+                    <div key={g.label} className="flex flex-col gap-1">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-muted-foreground">{g.label}</span>
+                        <span className="font-medium text-foreground tabular-nums">
+                          {formatCurrency(g.total, 'BRL')}
+                          <span className="text-muted-foreground ml-1.5">({pct.toFixed(1)}%)</span>
+                        </span>
+                      </div>
+                      <div className="w-full h-1.5 rounded-full bg-secondary overflow-hidden">
+                        <div className="h-full rounded-full bg-primary/60" style={{ width: `${barWidth}%` }} />
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
             </CardContent>
           </Card>
