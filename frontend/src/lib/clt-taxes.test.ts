@@ -6,36 +6,36 @@ describe('calculateINSS', () => {
   })
 
   it('calculates at first bracket ceiling', () => {
-    expect(calculateINSS(1518)).toBeCloseTo(1518 * 0.075, 2)
+    expect(calculateINSS(1621)).toBeCloseTo(1621 * 0.075, 2)
   })
 
   it('calculates for income in second bracket', () => {
-    // 1518 * 7.5% + (2000 - 1518) * 9%
-    const expected = 1518 * 0.075 + (2000 - 1518) * 0.09
+    // 1621 * 7.5% + (2000 - 1621) * 9%
+    const expected = 1621 * 0.075 + (2000 - 1621) * 0.09
     expect(calculateINSS(2000)).toBeCloseTo(expected, 2)
   })
 
   it('calculates for income in third bracket', () => {
-    const expected = 1518 * 0.075 + (2793.88 - 1518) * 0.09 + (3500 - 2793.88) * 0.12
+    const expected = 1621 * 0.075 + (2902.84 - 1621) * 0.09 + (3500 - 2902.84) * 0.12
     expect(calculateINSS(3500)).toBeCloseTo(expected, 2)
   })
 
   it('calculates for income in fourth bracket', () => {
     const expected =
-      1518 * 0.075 +
-      (2793.88 - 1518) * 0.09 +
-      (4190.83 - 2793.88) * 0.12 +
-      (5000 - 4190.83) * 0.14
+      1621 * 0.075 +
+      (2902.84 - 1621) * 0.09 +
+      (4354.27 - 2902.84) * 0.12 +
+      (5000 - 4354.27) * 0.14
     expect(calculateINSS(5000)).toBeCloseTo(expected, 2)
   })
 
   it('caps at ceiling contribution', () => {
     const ceilingContribution =
-      1518 * 0.075 +
-      (2793.88 - 1518) * 0.09 +
-      (4190.83 - 2793.88) * 0.12 +
-      (8157.41 - 4190.83) * 0.14
-    expect(calculateINSS(8157.41)).toBeCloseTo(ceilingContribution, 2)
+      1621 * 0.075 +
+      (2902.84 - 1621) * 0.09 +
+      (4354.27 - 2902.84) * 0.12 +
+      (8475.55 - 4354.27) * 0.14
+    expect(calculateINSS(8475.55)).toBeCloseTo(ceilingContribution, 2)
     expect(calculateINSS(20000)).toBeCloseTo(ceilingContribution, 2)
     expect(calculateINSS(50000)).toBeCloseTo(ceilingContribution, 2)
   })
@@ -44,31 +44,61 @@ describe('calculateINSS', () => {
 describe('calculateIRRF', () => {
   it('returns 0 for exempt range', () => {
     expect(calculateIRRF(2000)).toBe(0)
-    expect(calculateIRRF(2259.2)).toBe(0)
+    expect(calculateIRRF(2428.8)).toBe(0)
   })
 
-  it('calculates for second bracket', () => {
+  it('calculates for second bracket (no exemption)', () => {
     const base = 2500
-    const expected = base * 0.075 - 169.44
-    expect(calculateIRRF(base)).toBeCloseTo(expected, 2)
+    const expected = base * 0.075 - 182.16
+    expect(calculateIRRF(base, 8000)).toBeCloseTo(expected, 2)
   })
 
-  it('calculates for third bracket', () => {
+  it('calculates for third bracket (no exemption)', () => {
     const base = 3000
-    const expected = base * 0.15 - 381.44
-    expect(calculateIRRF(base)).toBeCloseTo(expected, 2)
+    const expected = base * 0.15 - 394.16
+    expect(calculateIRRF(base, 8000)).toBeCloseTo(expected, 2)
   })
 
-  it('calculates for fourth bracket', () => {
+  it('calculates for fourth bracket (no exemption)', () => {
     const base = 4000
-    const expected = base * 0.225 - 662.77
-    expect(calculateIRRF(base)).toBeCloseTo(expected, 2)
+    const expected = base * 0.225 - 675.49
+    expect(calculateIRRF(base, 8000)).toBeCloseTo(expected, 2)
   })
 
   it('calculates for highest bracket', () => {
     const base = 10000
-    const expected = base * 0.275 - 896.0
-    expect(calculateIRRF(base)).toBeCloseTo(expected, 2)
+    const expected = base * 0.275 - 908.73
+    expect(calculateIRRF(base, 15000)).toBeCloseTo(expected, 2)
+  })
+
+  it('returns 0 for gross salary up to R$ 5,000 (2026 exemption)', () => {
+    expect(calculateIRRF(4500, 5000)).toBe(0)
+    expect(calculateIRRF(3500, 4000)).toBe(0)
+    expect(calculateIRRF(4000, 4500)).toBe(0)
+  })
+
+  it('applies gradual reduction for gross between R$ 5,000 and R$ 7,350', () => {
+    const gross = 6000
+    const inss = calculateINSS(gross)
+    const base = gross - inss
+    // Calculate table tax: base ~5,487 falls in the 27.5% bracket
+    const noExemptionTax = calculateIRRF(base, 8000) // pass high gross to skip reduction
+    const reduction = 978.62 - 0.133145 * gross
+    const expected = Math.max(0, noExemptionTax - reduction)
+    expect(calculateIRRF(base, gross)).toBeCloseTo(expected, 2)
+  })
+
+  it('applies no reduction for gross above R$ 7,350', () => {
+    const gross = 10000
+    const inss = calculateINSS(gross)
+    const base = gross - inss
+    const tableTax = base * 0.275 - 908.73
+    expect(calculateIRRF(base, gross)).toBeCloseTo(tableTax, 2)
+  })
+
+  it('reduction reaches zero at R$ 7,350', () => {
+    const reduction = 978.62 - 0.133145 * 7350
+    expect(reduction).toBeCloseTo(0, 2)
   })
 })
 
@@ -76,14 +106,20 @@ describe('calculateNetSalary', () => {
   it('calculates net for a known gross salary', () => {
     const gross = 10000
     const inss = calculateINSS(gross)
-    const irrf = calculateIRRF(gross - inss)
+    const irrf = calculateIRRF(gross - inss, gross)
     expect(calculateNetSalary(gross)).toBeCloseTo(gross - inss - irrf, 2)
   })
 
-  it('returns full salary when below tax thresholds', () => {
-    // Very low salary: only INSS applies, IRRF is exempt
+  it('returns gross minus INSS only when below IRRF threshold', () => {
     const gross = 1500
     const inss = calculateINSS(gross)
+    expect(calculateNetSalary(gross)).toBeCloseTo(gross - inss, 2)
+  })
+
+  it('returns gross minus INSS only for R$ 5,000 (2026 exemption)', () => {
+    const gross = 5000
+    const inss = calculateINSS(gross)
+    // IRRF should be 0 due to the exemption
     expect(calculateNetSalary(gross)).toBeCloseTo(gross - inss, 2)
   })
 })
@@ -92,7 +128,6 @@ describe('calculateMonthlyIncome', () => {
   it('calculates regular month income (gross minus taxes and deductions)', () => {
     const gross = 10000
     const result = calculateMonthlyIncome(gross)
-    // grossBeforeTax should be the plain gross salary (no vacation spread)
     expect(result.grossBeforeTax).toBe(gross)
     expect(result.inss).toBeGreaterThan(0)
     expect(result.irrf).toBeGreaterThan(0)
@@ -106,9 +141,13 @@ describe('calculateMonthlyIncome', () => {
 
     expect(withDeductions.otherDeductions).toBe(500)
     expect(withDeductions.netIncome).toBeCloseTo(withoutDeductions.netIncome - 500, 2)
-    // Taxes should be unchanged
     expect(withDeductions.inss).toBeCloseTo(withoutDeductions.inss, 2)
     expect(withDeductions.irrf).toBeCloseTo(withoutDeductions.irrf, 2)
+  })
+
+  it('has zero IRRF for gross up to R$ 5,000', () => {
+    const result = calculateMonthlyIncome(5000)
+    expect(result.irrf).toBe(0)
   })
 })
 
