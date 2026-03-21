@@ -8,5 +8,10 @@ frontend/dist/
 # Secrets
 backend/.env
 
+# Database
+*.db
+*.db-shm
+*.db-wal
+
 # OS
 .DS_Store
