@@ -91,6 +91,39 @@
   .font-heading {
     font-family: var(--font-heading);
   }
+
+  .shimmer {
+    position: relative;
+    overflow: hidden;
+  }
+  .shimmer::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      110deg,
+      transparent 25%,
+      hsl(var(--foreground) / 0.04) 37%,
+      transparent 50%
+    );
+    background-size: 200% 100%;
+    animation: shimmer-sweep 1.8s ease-in-out infinite;
+  }
+
+  @keyframes shimmer-sweep {
+    0%   { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
+
+  @keyframes rise-in {
+    0%   { opacity: 0; transform: translateY(12px); }
+    100% { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes chart-grow {
+    0%   { transform: scaleY(0.3); opacity: 0.3; }
+    100% { transform: scaleY(1); opacity: 1; }
+  }
 }
 
 @layer base {

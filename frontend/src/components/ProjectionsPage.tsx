@@ -84,7 +84,7 @@ export function ProjectionsPage({ positions, accountsSummary, items, formatCurre
   const [newDeductionName, setNewDeductionName] = useState('')
   const [newDeductionAmount, setNewDeductionAmount] = useState('')
   const [avgExpenses, setAvgExpenses] = useState<string>('')
-  const [avgExpensesLoading, setAvgExpensesLoading] = useState(false)
+  const [avgExpensesLoading, setAvgExpensesLoading] = useState(items.length > 0)
   const [monthsAnalyzed, setMonthsAnalyzed] = useState<number>(0)
   const [compoundSavings, setCompoundSavings] = useState<boolean>(() => {
     const saved = getSalaryConfig()
@@ -94,6 +94,8 @@ export function ProjectionsPage({ positions, accountsSummary, items, formatCurre
   const [sheetRatesOpen, setSheetRatesOpen] = useState(true)
   const [sheetIncomeOpen, setSheetIncomeOpen] = useState(true)
   const [sheetBonusesOpen, setSheetBonusesOpen] = useState(true)
+
+  const dataReady = !ratesLoading && !avgExpensesLoading
 
   useEffect(() => {
     async function fetchRates() {
@@ -608,6 +610,54 @@ export function ProjectionsPage({ positions, accountsSummary, items, formatCurre
         </Sheet>
       </div>
 
+      {!dataReady ? (
+        <>
+          {/* Skeleton KPI cards with staggered rise-in + shimmer */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {[0, 1, 2].map((i) => (
+              <Card
+                key={i}
+                className="overflow-hidden shimmer opacity-0"
+                style={{ animation: `rise-in 0.5s ease-out ${i * 0.12}s forwards` }}
+              >
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 pt-2.5 px-4">
+                  <Skeleton className="h-3 w-24 rounded" />
+                  <Skeleton className="h-9 w-9 rounded-xl" />
+                </CardHeader>
+                <CardContent className="px-4 pb-3 space-y-2">
+                  <Skeleton className="h-7 w-32 rounded" />
+                  <Skeleton className="h-3 w-20 rounded" />
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+
+          {/* Skeleton chart with animated bars */}
+          <Card
+            className="overflow-hidden shimmer opacity-0"
+            style={{ animation: 'rise-in 0.5s ease-out 0.36s forwards' }}
+          >
+            <CardHeader className="pb-2">
+              <Skeleton className="h-5 w-40 rounded" />
+            </CardHeader>
+            <CardContent>
+              <div className="h-[350px] flex items-end gap-[3%] px-4 pb-6 pt-4">
+                {[0.4, 0.55, 0.65, 0.5, 0.7, 0.8, 0.75, 0.9, 0.85, 0.95].map((h, i) => (
+                  <div
+                    key={i}
+                    className="flex-1 origin-bottom rounded-t bg-muted"
+                    style={{
+                      height: `${h * 100}%`,
+                      animation: `chart-grow 0.6s ease-out ${0.5 + i * 0.06}s both`,
+                    }}
+                  />
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </>
+      ) : (
+      <>
       {/* 3. Summary KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Current Net Worth */}
@@ -874,6 +924,8 @@ export function ProjectionsPage({ positions, accountsSummary, items, formatCurre
         { label: 'growthAttribution', data: growthAttribution },
         { label: 'items', data: items },
       ]} />
+      </>
+      )}
     </div>
   )
 }
