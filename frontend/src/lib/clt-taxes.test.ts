@@ -119,6 +119,18 @@ describe('calculateMonthlyIncome', () => {
     expect(december.netIncome).toBeCloseTo(regularMonth.netIncome + secondInstallment, 2)
   })
 
+  it('subtracts other deductions from net income', () => {
+    const gross = 10000
+    const withoutDeductions = calculateMonthlyIncome(gross, 3)
+    const withDeductions = calculateMonthlyIncome(gross, 3, 10, 500)
+
+    expect(withDeductions.otherDeductions).toBe(500)
+    expect(withDeductions.netIncome).toBeCloseTo(withoutDeductions.netIncome - 500, 2)
+    // Taxes should be unchanged
+    expect(withDeductions.inss).toBeCloseTo(withoutDeductions.inss, 2)
+    expect(withDeductions.irrf).toBeCloseTo(withoutDeductions.irrf, 2)
+  })
+
   it('returns consistent INSS/IRRF for regular months', () => {
     const gross = 8000
     const jan = calculateMonthlyIncome(gross, 0)

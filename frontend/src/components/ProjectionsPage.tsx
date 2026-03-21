@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid } from 'recharts'
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, ReferenceLine } from 'recharts'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -7,10 +7,10 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { ChartContainer, ChartTooltip, type ChartConfig } from '@/components/ui/chart'
 import { Sheet, SheetTrigger, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet'
 import { Button } from '@/components/ui/button'
-import { TrendingUp, Percent, Wallet, PiggyBank, ChevronDown, ChevronRight, SlidersHorizontal } from 'lucide-react'
+import { TrendingUp, Percent, Wallet, PiggyBank, ChevronDown, ChevronRight, SlidersHorizontal, Plus, X } from 'lucide-react'
 import { projectNetWorth } from '@/lib/projections'
 import { calculateMonthlyIncome } from '@/lib/clt-taxes'
-import { getSalaryConfig, saveSalaryConfig } from '@/lib/storage'
+import { getSalaryConfig, saveSalaryConfig, type SalaryDeduction } from '@/lib/storage'
 import type { InvestmentPosition, AccountsSummary, MarketRates, ConnectedItem, AverageExpensesResponse } from '@/types'
 import { DebugPanel } from './DebugPanel'
 
@@ -68,6 +68,12 @@ export function ProjectionsPage({ positions, accountsSummary, items, formatCurre
     const saved = getSalaryConfig()
     return saved?.thirteenthFirstMonth ?? 10
   })
+  const [deductions, setDeductions] = useState<SalaryDeduction[]>(() => {
+    const saved = getSalaryConfig()
+    return saved?.deductions ?? []
+  })
+  const [newDeductionName, setNewDeductionName] = useState('')
+  const [newDeductionAmount, setNewDeductionAmount] = useState('')
   const [avgExpenses, setAvgExpenses] = useState<string>('')
   const [avgExpensesLoading, setAvgExpensesLoading] = useState(false)
   const [monthsAnalyzed, setMonthsAnalyzed] = useState<number>(0)
@@ -115,15 +121,16 @@ export function ProjectionsPage({ positions, accountsSummary, items, formatCurre
   useEffect(() => {
     const val = parseFloat(grossSalary)
     if (val > 0) {
-      saveSalaryConfig({ grossSalary: val, thirteenthFirstMonth })
+      saveSalaryConfig({ grossSalary: val, thirteenthFirstMonth, deductions })
     }
-  }, [grossSalary, thirteenthFirstMonth])
+  }, [grossSalary, thirteenthFirstMonth, deductions])
 
   const cdiAnnual = parseFloat(cdiOverride) || 0
   const ipcaAnnual = parseFloat(ipcaOverride) || 0
   const accountsBalance = accountsSummary?.total_balance ?? 0
   const grossSalaryNum = parseFloat(grossSalary) || 0
   const avgExpensesNum = parseFloat(avgExpenses) || 0
+  const totalDeductions = deductions.reduce((sum, d) => sum + d.amount, 0)
 
   const projectionData = useMemo(
     () =>
@@ -135,16 +142,20 @@ export function ProjectionsPage({ positions, accountsSummary, items, formatCurre
         grossSalary: grossSalaryNum,
         avgMonthlyExpenses: avgExpensesNum,
         thirteenthFirstMonth,
+        otherDeductions: totalDeductions,
       }),
-    [positions, accountsBalance, cdiAnnual, ipcaAnnual, grossSalaryNum, avgExpensesNum, thirteenthFirstMonth],
+    [positions, accountsBalance, cdiAnnual, ipcaAnnual, grossSalaryNum, avgExpensesNum, thirteenthFirstMonth, totalDeductions],
   )
 
   const currentTotal = projectionData[0]?.total ?? 0
-  const endTotal = projectionData[projectionData.length - 1]?.total ?? 0
-  const growthPct = currentTotal > 0 ? ((endTotal - currentTotal) / currentTotal) * 100 : 0
+  const decemberKey = `${new Date().getFullYear()}-12`
+  const decemberPoint = projectionData.find(p => p.month === decemberKey)
+  const decemberLabel = decemberPoint?.label ?? ''
+  const endOfYearTotal = decemberPoint?.total ?? projectionData[projectionData.length - 1]?.total ?? 0
+  const growthPct = currentTotal > 0 ? ((endOfYearTotal - currentTotal) / currentTotal) * 100 : 0
 
   // Regular month income for display
-  const regularIncome = grossSalaryNum > 0 ? calculateMonthlyIncome(grossSalaryNum, 3) : null
+  const regularIncome = grossSalaryNum > 0 ? calculateMonthlyIncome(grossSalaryNum, 3, 10, totalDeductions) : null
   const monthlySurplus = regularIncome ? regularIncome.netIncome - avgExpensesNum : 0
 
   // Income schedule: month-by-month projected income
@@ -152,9 +163,9 @@ export function ProjectionsPage({ positions, accountsSummary, items, formatCurre
     if (grossSalaryNum <= 0) return []
     const now = new Date()
     const year = now.getFullYear()
-    const rows: { month: string; monthIdx: number; gross: number; inss: number; irrf: number; net: number; note: string }[] = []
+    const rows: { month: string; monthIdx: number; gross: number; inss: number; irrf: number; otherDeductions: number; net: number; note: string }[] = []
     for (let m = now.getMonth(); m <= 11; m++) {
-      const income = calculateMonthlyIncome(grossSalaryNum, m, thirteenthFirstMonth)
+      const income = calculateMonthlyIncome(grossSalaryNum, m, thirteenthFirstMonth, totalDeductions)
       let note = ''
       if (m === thirteenthFirstMonth) note = '13th 1st installment'
       if (m === 11) note = '13th 2nd installment'
@@ -164,28 +175,29 @@ export function ProjectionsPage({ positions, accountsSummary, items, formatCurre
         gross: income.grossBeforeTax,
         inss: income.inss,
         irrf: income.irrf,
+        otherDeductions: income.otherDeductions,
         net: income.netIncome,
         note,
       })
     }
     return rows
-  }, [grossSalaryNum, thirteenthFirstMonth])
+  }, [grossSalaryNum, thirteenthFirstMonth, totalDeductions])
 
   // Growth attribution: contributions vs compound interest
   const growthAttribution = useMemo(() => {
     if (projectionData.length < 2) return null
-    const totalGain = endTotal - currentTotal
+    const totalGain = endOfYearTotal - currentTotal
     const now = new Date()
     let totalContributions = 0
     for (let m = now.getMonth() + 1; m <= 11; m++) {
       if (grossSalaryNum > 0) {
-        const income = calculateMonthlyIncome(grossSalaryNum, m, thirteenthFirstMonth)
+        const income = calculateMonthlyIncome(grossSalaryNum, m, thirteenthFirstMonth, totalDeductions)
         totalContributions += income.netIncome - avgExpensesNum
       }
     }
     const fromInterest = totalGain - totalContributions
     return { totalGain, totalContributions, fromInterest }
-  }, [projectionData, endTotal, currentTotal, grossSalaryNum, avgExpensesNum, thirteenthFirstMonth])
+  }, [projectionData, endOfYearTotal, currentTotal, grossSalaryNum, avgExpensesNum, thirteenthFirstMonth, totalDeductions])
 
   return (
     <div className="space-y-6">
@@ -314,6 +326,63 @@ export function ProjectionsPage({ positions, accountsSummary, items, formatCurre
                       ))}
                     </select>
                   </div>
+                  {/* Other Deductions */}
+                  <div className="space-y-2">
+                    <Label className="text-xs text-muted-foreground">
+                      Other Deductions (R$/mo)
+                    </Label>
+                    {deductions.map((d, idx) => (
+                      <div key={idx} className="flex items-center gap-2">
+                        <span className="text-xs truncate flex-1">{d.name}</span>
+                        <span className="text-xs tabular-nums font-mono">{d.amount.toFixed(2)}</span>
+                        <button
+                          className="text-muted-foreground hover:text-destructive transition-colors"
+                          onClick={() => setDeductions(prev => prev.filter((_, i) => i !== idx))}
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                    <div className="flex items-end gap-2">
+                      <div className="flex-1 space-y-1">
+                        <Input
+                          placeholder="Name"
+                          value={newDeductionName}
+                          onChange={(e) => setNewDeductionName(e.target.value)}
+                          className="h-8 text-xs"
+                        />
+                      </div>
+                      <div className="w-24 space-y-1">
+                        <Input
+                          type="number"
+                          step="0.01"
+                          placeholder="0.00"
+                          value={newDeductionAmount}
+                          onChange={(e) => setNewDeductionAmount(e.target.value)}
+                          className="h-8 text-xs"
+                        />
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="h-8 w-8 shrink-0"
+                        disabled={!newDeductionName.trim() || !parseFloat(newDeductionAmount)}
+                        onClick={() => {
+                          setDeductions(prev => [...prev, { name: newDeductionName.trim(), amount: parseFloat(newDeductionAmount) }])
+                          setNewDeductionName('')
+                          setNewDeductionAmount('')
+                        }}
+                      >
+                        <Plus className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                    {totalDeductions > 0 && (
+                      <div className="flex justify-between text-xs pt-1">
+                        <span className="text-muted-foreground">Total deductions</span>
+                        <span className="font-semibold">{formatCurrency(totalDeductions, 'BRL')}</span>
+                      </div>
+                    )}
+                  </div>
                   <div className="space-y-1.5">
                     <Label htmlFor="avg-expenses" className="text-xs text-muted-foreground">
                       Avg Monthly Expenses (R$)
@@ -349,6 +418,12 @@ export function ProjectionsPage({ positions, accountsSummary, items, formatCurre
                       <span className="text-muted-foreground">IRRF</span>
                       <span className="font-semibold">{formatCurrency(regularIncome.irrf, 'BRL')}</span>
                     </div>
+                    {regularIncome.otherDeductions > 0 && (
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Other Deductions</span>
+                        <span className="font-semibold">{formatCurrency(regularIncome.otherDeductions, 'BRL')}</span>
+                      </div>
+                    )}
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Monthly Surplus</span>
                       <span className={`font-semibold ${monthlySurplus >= 0 ? 'text-emerald-500' : 'text-red-400'}`}>
@@ -397,7 +472,7 @@ export function ProjectionsPage({ positions, accountsSummary, items, formatCurre
           </CardHeader>
           <CardContent className="px-4 pb-3">
             <div className="text-2xl font-bold font-heading tracking-tight">
-              {formatCurrency(endTotal, 'BRL')}
+              {formatCurrency(endOfYearTotal, 'BRL')}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
               End of year estimate
@@ -501,6 +576,15 @@ export function ProjectionsPage({ positions, accountsSummary, items, formatCurre
                   fillOpacity={0.4}
                   activeDot={{ r: 5, strokeWidth: 2, stroke: 'hsl(var(--background))' }}
                 />
+                {decemberLabel && (
+                  <ReferenceLine
+                    x={decemberLabel}
+                    stroke="hsl(var(--muted-foreground))"
+                    strokeDasharray="4 4"
+                    strokeOpacity={0.6}
+                    label={{ value: `Dec ${new Date().getFullYear()}`, position: 'insideTopRight', fontSize: 11, fill: 'hsl(var(--muted-foreground))', dy: 8, dx: 4 }}
+                  />
+                )}
               </AreaChart>
             </ChartContainer>
           ) : (
@@ -581,6 +665,7 @@ export function ProjectionsPage({ positions, accountsSummary, items, formatCurre
                       <th className="text-right py-2 px-2 font-medium">Gross</th>
                       <th className="text-right py-2 px-2 font-medium">INSS</th>
                       <th className="text-right py-2 px-2 font-medium">IRRF</th>
+                      {totalDeductions > 0 && <th className="text-right py-2 px-2 font-medium">Other</th>}
                       <th className="text-right py-2 px-2 font-medium">Net</th>
                       <th className="text-left py-2 pl-4 font-medium">Note</th>
                     </tr>
@@ -595,6 +680,7 @@ export function ProjectionsPage({ positions, accountsSummary, items, formatCurre
                         <td className="text-right py-2 px-2 tabular-nums">{formatCurrency(row.gross, 'BRL')}</td>
                         <td className="text-right py-2 px-2 tabular-nums text-muted-foreground">{formatCurrency(row.inss, 'BRL')}</td>
                         <td className="text-right py-2 px-2 tabular-nums text-muted-foreground">{formatCurrency(row.irrf, 'BRL')}</td>
+                        {totalDeductions > 0 && <td className="text-right py-2 px-2 tabular-nums text-muted-foreground">{formatCurrency(row.otherDeductions, 'BRL')}</td>}
                         <td className="text-right py-2 px-2 tabular-nums font-semibold">{formatCurrency(row.net, 'BRL')}</td>
                         <td className="py-2 pl-4 text-amber-500">{row.note}</td>
                       </tr>

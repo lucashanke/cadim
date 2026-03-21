@@ -19,7 +19,12 @@ export function saveManualPositions(positions: ManualPosition[]) {
 
 export const SALARY_CONFIG_COOKIE = 'salary_config'
 
-export function getSalaryConfig(): { grossSalary: number } | null {
+export interface SalaryDeduction {
+  name: string
+  amount: number
+}
+
+export function getSalaryConfig(): { grossSalary: number; thirteenthFirstMonth?: number; deductions?: SalaryDeduction[] } | null {
   try {
     const match = document.cookie.match(new RegExp(`(?:^|; )${SALARY_CONFIG_COOKIE}=([^;]*)`))
     if (!match) return null
@@ -27,7 +32,7 @@ export function getSalaryConfig(): { grossSalary: number } | null {
   } catch { return null }
 }
 
-export function saveSalaryConfig(config: { grossSalary: number }) {
+export function saveSalaryConfig(config: { grossSalary: number; thirteenthFirstMonth?: number; deductions?: SalaryDeduction[] }) {
   try {
     document.cookie = `${SALARY_CONFIG_COOKIE}=${encodeURIComponent(JSON.stringify(config))}; path=/; max-age=31536000; SameSite=Lax`
   } catch (e) { console.warn('Could not save salary config', e) }
