@@ -1,6 +1,8 @@
 import { describe, it, expect, vi } from 'vitest'
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { http, HttpResponse } from 'msw'
+import { server } from '../../test/msw-server'
 import { renderWithRouter } from '../../test/render'
 import App from '../../App'
 
@@ -8,15 +10,21 @@ vi.mock('react-pluggy-connect', () => ({
   PluggyConnect: () => null,
 }))
 
+const seedPosition = {
+  id: 'manual_edit_test',
+  user_id: 'test-user-id',
+  investment_type: 'FIXED_INCOME',
+  subtype: 'CDB',
+  amount: 1000,
+  due_date: null,
+}
+
 function seedManualPosition() {
-  const pos = {
-    id: 'manual_edit_test',
-    investment_type: 'FIXED_INCOME',
-    subtype: 'CDB',
-    amount: 1000,
-    due_date: null,
-  }
-  document.cookie = `manual_investment_positions=${encodeURIComponent(JSON.stringify([pos]))}; path=/`
+  server.use(
+    http.get('/api/positions', () =>
+      HttpResponse.json([seedPosition])
+    )
+  )
 }
 
 async function openEditModal() {
@@ -50,6 +58,14 @@ describe('EditManualPosition integration', () => {
   })
 
   it('updates the position amount after clicking Update', async () => {
+    let capturedBody: Record<string, unknown> | null = null
+    server.use(
+      http.put('/api/positions/:id', async ({ request }) => {
+        capturedBody = await request.json() as Record<string, unknown>
+        return HttpResponse.json({ ...seedPosition, amount: 2500 })
+      })
+    )
+
     const user = await openEditModal()
 
     const input = screen.getByRole('spinbutton')
@@ -62,13 +78,19 @@ describe('EditManualPosition integration', () => {
       expect(screen.queryByText('Edit Position')).toBeNull()
     })
 
-    // Cookie should be updated
-    const match = document.cookie.match(/manual_investment_positions=([^;]*)/)
-    const positions = JSON.parse(decodeURIComponent(match![1]))
-    expect(positions[0].amount).toBe(2500)
+    // API should have been called with the new amount
+    expect(capturedBody).toEqual({ amount: 2500 })
   })
 
   it('Cancel closes the modal without updating', async () => {
+    let apiCalled = false
+    server.use(
+      http.put('/api/positions/:id', () => {
+        apiCalled = true
+        return HttpResponse.json(seedPosition)
+      })
+    )
+
     const user = await openEditModal()
 
     const input = screen.getByRole('spinbutton')
@@ -81,9 +103,7 @@ describe('EditManualPosition integration', () => {
       expect(screen.queryByText('Edit Position')).toBeNull()
     })
 
-    // Cookie should still have original amount
-    const match = document.cookie.match(/manual_investment_positions=([^;]*)/)
-    const positions = JSON.parse(decodeURIComponent(match![1]))
-    expect(positions[0].amount).toBe(1000)
+    // API should not have been called
+    expect(apiCalled).toBe(false)
   })
 })

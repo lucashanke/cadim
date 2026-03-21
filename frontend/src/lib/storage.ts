@@ -2,6 +2,9 @@ import type { ConnectedItem, ManualPosition } from '@/types'
 
 export const STORAGE_KEY = 'pluggy_items'
 export const MANUAL_POSITIONS_COOKIE = 'manual_investment_positions'
+export const SALARY_CONFIG_COOKIE = 'salary_config'
+
+// Cookie readers — kept for one-time migration to API, not for regular use
 
 export function getManualPositions(): ManualPosition[] {
   try {
@@ -10,14 +13,6 @@ export function getManualPositions(): ManualPosition[] {
     return JSON.parse(decodeURIComponent(match[1])) ?? []
   } catch { return [] }
 }
-
-export function saveManualPositions(positions: ManualPosition[]) {
-  try {
-    document.cookie = `${MANUAL_POSITIONS_COOKIE}=${encodeURIComponent(JSON.stringify(positions))}; path=/; max-age=31536000; SameSite=Lax`
-  } catch (e) { console.warn('Could not save manual positions', e) }
-}
-
-export const SALARY_CONFIG_COOKIE = 'salary_config'
 
 export interface SalaryDeduction {
   name: string
@@ -30,7 +25,7 @@ export interface SalaryConfig {
   thirteenthReceived?: number
   vacationThirdReceived?: number
   bonusYear?: number
-  compoundSavings?: boolean // whether bank balance earns CDI (default false)
+  compoundSavings?: boolean
 }
 
 export function getSalaryConfig(): SalaryConfig | null {
@@ -41,11 +36,7 @@ export function getSalaryConfig(): SalaryConfig | null {
   } catch { return null }
 }
 
-export function saveSalaryConfig(config: SalaryConfig) {
-  try {
-    document.cookie = `${SALARY_CONFIG_COOKIE}=${encodeURIComponent(JSON.stringify(config))}; path=/; max-age=31536000; SameSite=Lax`
-  } catch (e) { console.warn('Could not save salary config', e) }
-}
+// localStorage reader — kept for one-time migration to API
 
 export function getStoredItems(): ConnectedItem[] {
   try {
@@ -56,10 +47,6 @@ export function getStoredItems(): ConnectedItem[] {
   } catch {
     return []
   }
-}
-
-export function storeItems(items: ConnectedItem[]) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(items))
 }
 
 export async function fetchItemName(itemId: string): Promise<string> {

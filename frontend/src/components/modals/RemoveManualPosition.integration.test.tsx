@@ -1,6 +1,8 @@
 import { describe, it, expect, vi } from 'vitest'
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { http, HttpResponse } from 'msw'
+import { server } from '../../test/msw-server'
 import { renderWithRouter } from '../../test/render'
 import App from '../../App'
 
@@ -9,14 +11,18 @@ vi.mock('react-pluggy-connect', () => ({
 }))
 
 function seedManualPosition() {
-  const pos = {
-    id: 'manual_remove_test',
-    investment_type: 'FIXED_INCOME',
-    subtype: 'CDB',
-    amount: 750,
-    due_date: null,
-  }
-  document.cookie = `manual_investment_positions=${encodeURIComponent(JSON.stringify([pos]))}; path=/`
+  server.use(
+    http.get('/api/positions', () =>
+      HttpResponse.json([{
+        id: 'manual_remove_test',
+        user_id: 'test-user-id',
+        investment_type: 'FIXED_INCOME',
+        subtype: 'CDB',
+        amount: 750,
+        due_date: null,
+      }])
+    )
+  )
 }
 
 describe('RemoveManualPosition integration', () => {
@@ -43,7 +49,15 @@ describe('RemoveManualPosition integration', () => {
     })
   })
 
-  it('updates the cookie after removing the position', async () => {
+  it('calls DELETE API after removing the position', async () => {
+    let deletedId: string | null = null
+    server.use(
+      http.delete('/api/positions/:id', ({ params }) => {
+        deletedId = params.id as string
+        return new HttpResponse(null, { status: 204 })
+      })
+    )
+
     const user = userEvent.setup()
     seedManualPosition()
     renderWithRouter(<App />)
@@ -62,11 +76,6 @@ describe('RemoveManualPosition integration', () => {
       expect(screen.queryByText('Manual')).toBeNull()
     })
 
-    // Cookie should be updated (empty array or no matching position)
-    const match = document.cookie.match(/manual_investment_positions=([^;]*)/)
-    if (match) {
-      const positions = JSON.parse(decodeURIComponent(match[1]))
-      expect(positions).toHaveLength(0)
-    }
+    expect(deletedId).toBe('manual_remove_test')
   })
 })

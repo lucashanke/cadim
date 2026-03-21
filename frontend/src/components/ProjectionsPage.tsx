@@ -11,7 +11,8 @@ import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip
 import { TrendingUp, Percent, Wallet, PiggyBank, ChevronDown, ChevronRight, SlidersHorizontal, Plus, X, Gift, Info } from 'lucide-react'
 import { projectNetWorth } from '@/lib/projections'
 import { calculateMonthlyIncome, calculateAnnualBonuses } from '@/lib/clt-taxes'
-import { getSalaryConfig, saveSalaryConfig, type SalaryDeduction } from '@/lib/storage'
+import { getCompensationConfig, saveCompensationConfig } from '@/lib/api'
+import type { SalaryDeduction } from '@/lib/storage'
 import type { InvestmentPosition, AccountsSummary, MarketRates, ConnectedItem, AverageExpensesResponse } from '@/types'
 import { DebugPanel } from './DebugPanel'
 
@@ -61,35 +62,17 @@ export function ProjectionsPage({ positions, accountsSummary, items, formatCurre
   const [ratesLoading, setRatesLoading] = useState(true)
   const [cdiOverride, setCdiOverride] = useState<string>('')
   const [ipcaOverride, setIpcaOverride] = useState<string>('')
-  const [grossSalary, setGrossSalary] = useState<string>(() => {
-    const saved = getSalaryConfig()
-    return saved ? String(saved.grossSalary) : ''
-  })
-  const [thirteenthReceived, setThirteenthReceived] = useState<string>(() => {
-    const saved = getSalaryConfig()
-    const currentYear = new Date().getFullYear()
-    if (saved?.bonusYear !== currentYear) return ''
-    return saved?.thirteenthReceived ? String(saved.thirteenthReceived) : ''
-  })
-  const [vacationThirdReceived, setVacationThirdReceived] = useState<string>(() => {
-    const saved = getSalaryConfig()
-    const currentYear = new Date().getFullYear()
-    if (saved?.bonusYear !== currentYear) return ''
-    return saved?.vacationThirdReceived ? String(saved.vacationThirdReceived) : ''
-  })
-  const [deductions, setDeductions] = useState<SalaryDeduction[]>(() => {
-    const saved = getSalaryConfig()
-    return saved?.deductions ?? []
-  })
+  const [grossSalary, setGrossSalary] = useState<string>('')
+  const [thirteenthReceived, setThirteenthReceived] = useState<string>('')
+  const [vacationThirdReceived, setVacationThirdReceived] = useState<string>('')
+  const [deductions, setDeductions] = useState<SalaryDeduction[]>([])
   const [newDeductionName, setNewDeductionName] = useState('')
   const [newDeductionAmount, setNewDeductionAmount] = useState('')
   const [avgExpenses, setAvgExpenses] = useState<string>('')
   const [avgExpensesLoading, setAvgExpensesLoading] = useState(items.length > 0)
   const [monthsAnalyzed, setMonthsAnalyzed] = useState<number>(0)
-  const [compoundSavings, setCompoundSavings] = useState<boolean>(() => {
-    const saved = getSalaryConfig()
-    return saved?.compoundSavings ?? false
-  })
+  const [compoundSavings, setCompoundSavings] = useState<boolean>(false)
+  const [configLoaded, setConfigLoaded] = useState(false)
   const [showIncomeSchedule, setShowIncomeSchedule] = useState(false)
   const [sheetRatesOpen, setSheetRatesOpen] = useState(true)
   const [sheetIncomeOpen, setSheetIncomeOpen] = useState(true)
@@ -136,19 +119,48 @@ export function ProjectionsPage({ positions, accountsSummary, items, formatCurre
     fetchExpenses()
   }, [items])
 
+  // Load compensation config from API
   useEffect(() => {
+    async function loadConfig() {
+      try {
+        const config = await getCompensationConfig()
+        if (config) {
+          setGrossSalary(config.grossSalary ? String(config.grossSalary) : '')
+          setDeductions(config.deductions ?? [])
+          setCompoundSavings(config.compoundSavings ?? false)
+          const currentYear = new Date().getFullYear()
+          if (config.bonusYear === currentYear) {
+            setThirteenthReceived(config.thirteenthReceived ? String(config.thirteenthReceived) : '')
+            setVacationThirdReceived(config.vacationThirdReceived ? String(config.vacationThirdReceived) : '')
+          }
+        }
+      } catch {
+        // Config not found or error — start with empty fields
+      } finally {
+        setConfigLoaded(true)
+      }
+    }
+    loadConfig()
+  }, [])
+
+  // Save compensation config to API (debounced 500ms)
+  useEffect(() => {
+    if (!configLoaded) return
     const val = parseFloat(grossSalary)
-    if (val > 0) {
-      saveSalaryConfig({
+    if (!(val > 0)) return
+
+    const timer = setTimeout(() => {
+      saveCompensationConfig({
         grossSalary: val,
         deductions,
         thirteenthReceived: parseFloat(thirteenthReceived) || 0,
         vacationThirdReceived: parseFloat(vacationThirdReceived) || 0,
         bonusYear: new Date().getFullYear(),
         compoundSavings,
-      })
-    }
-  }, [grossSalary, deductions, thirteenthReceived, vacationThirdReceived, compoundSavings])
+      }).catch(err => console.warn('Failed to save compensation config', err))
+    }, 500)
+    return () => clearTimeout(timer)
+  }, [grossSalary, deductions, thirteenthReceived, vacationThirdReceived, compoundSavings, configLoaded])
 
   const cdiAnnual = parseFloat(cdiOverride) || 0
   const ipcaAnnual = parseFloat(ipcaOverride) || 0

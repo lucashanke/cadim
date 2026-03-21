@@ -181,6 +181,51 @@ export const sampleTransactionsMultiCycle = {
 }
 
 export const handlers = [
+  // Auth endpoints
+  http.get('/api/auth/me', () =>
+    HttpResponse.json({ id: 'test-user-id', email: 'test@example.com' })
+  ),
+
+  // Data endpoints
+  http.get('/api/positions', () =>
+    HttpResponse.json([])
+  ),
+
+  http.post('/api/positions', async ({ request }) => {
+    const body = await request.json() as Record<string, unknown>
+    return HttpResponse.json({ id: 'new-pos-id', user_id: 'test-user-id', ...body }, { status: 201 })
+  }),
+
+  http.put('/api/positions/:id', async ({ request, params }) => {
+    const body = await request.json() as Record<string, unknown>
+    return HttpResponse.json({ id: params.id, user_id: 'test-user-id', investment_type: 'FIXED_INCOME', subtype: null, amount: 0, due_date: null, ...body })
+  }),
+
+  http.delete('/api/positions/:id', () =>
+    new HttpResponse(null, { status: 204 })
+  ),
+
+  http.get('/api/compensation-config', () =>
+    HttpResponse.json(null)
+  ),
+
+  http.put('/api/compensation-config', () =>
+    HttpResponse.json({ ok: true })
+  ),
+
+  http.get('/api/pluggy-items', () =>
+    HttpResponse.json([])
+  ),
+
+  http.post('/api/pluggy-items', async ({ request }) => {
+    const body = await request.json() as Record<string, unknown>
+    return HttpResponse.json({ id: 'new-pluggy-item-id', user_id: 'test-user-id', ...body }, { status: 201 })
+  }),
+
+  http.delete('/api/pluggy-items/:pluggyItemId', () =>
+    new HttpResponse(null, { status: 204 })
+  ),
+
   http.get('/api/health', () =>
     HttpResponse.json({ status: 'ok', message: 'cadim backend is running' })
   ),

@@ -16,6 +16,10 @@ pub enum AppError {
     PluggyClient(String),
     PluggyServer { status: StatusCode, msg: String },
     Internal(String),
+    Unauthorized(String),
+    BadRequest(String),
+    NotFound(String),
+    Conflict(String),
 }
 
 impl fmt::Display for AppError {
@@ -24,6 +28,10 @@ impl fmt::Display for AppError {
             Self::PluggyClient(msg) => write!(f, "Pluggy client error: {}", msg),
             Self::PluggyServer { status, msg } => write!(f, "Pluggy server error ({}): {}", status, msg),
             Self::Internal(msg) => write!(f, "Internal error: {}", msg),
+            Self::Unauthorized(msg) => write!(f, "{}", msg),
+            Self::BadRequest(msg) => write!(f, "{}", msg),
+            Self::NotFound(msg) => write!(f, "{}", msg),
+            Self::Conflict(msg) => write!(f, "{}", msg),
         }
     }
 }
@@ -37,6 +45,10 @@ impl IntoResponse for AppError {
                 (StatusCode::BAD_GATEWAY, self.to_string())
             }
             AppError::Internal(_) => (StatusCode::INTERNAL_SERVER_ERROR, self.to_string()),
+            AppError::Unauthorized(_) => (StatusCode::UNAUTHORIZED, self.to_string()),
+            AppError::BadRequest(_) => (StatusCode::BAD_REQUEST, self.to_string()),
+            AppError::NotFound(_) => (StatusCode::NOT_FOUND, self.to_string()),
+            AppError::Conflict(_) => (StatusCode::CONFLICT, self.to_string()),
         };
 
         let body = Json(ErrorResponse {

@@ -11,18 +11,28 @@ import { InvestmentsPage } from '@/components/InvestmentsPage'
 import { ProjectionsPage } from '@/components/ProjectionsPage'
 import { AddManualPositionModal } from '@/components/modals/AddManualPositionModal'
 import { EditManualPositionModal } from '@/components/modals/EditManualPositionModal'
+import { LoginPage } from '@/pages/LoginPage'
+import { RegisterPage } from '@/pages/RegisterPage'
 import { INVESTMENT_TYPE_LABELS, SUBTYPE_LABELS } from '@/constants/investments'
-import { getStoredItems, storeItems, getManualPositions, saveManualPositions, fetchItemName } from '@/lib/storage'
+import { getStoredItems, fetchItemName, getManualPositions, getSalaryConfig, MANUAL_POSITIONS_COOKIE, SALARY_CONFIG_COOKIE, STORAGE_KEY } from '@/lib/storage'
 import { formatCurrency } from '@/lib/format'
+import * as api from '@/lib/api'
+import { useAuth } from '@/contexts/AuthContext'
 import type { HealthStatus, AccountsSummary, InvestmentsSummary, InvestmentPosition, ConnectedItem, ManualPosition, CreditCardAccount, BillingCycle } from '@/types'
 import './App.css'
 
-function App() {
+function clearCookie(name: string) {
+  document.cookie = `${name}=; path=/; max-age=0; SameSite=Lax`
+}
+
+function AuthenticatedApp() {
+  const { logout } = useAuth()
   const [health, setHealth] = useState<HealthStatus | null>(null)
   const [accountsSummary, setAccountsSummary] = useState<AccountsSummary | null>(null)
   const [connectToken, setConnectToken] = useState<string | null>(null)
   const [showWidget, setShowWidget] = useState(false)
-  const [items, setItems] = useState<ConnectedItem[]>(getStoredItems)
+  const [items, setItems] = useState<ConnectedItem[]>([])
+  const [itemsLoading, setItemsLoading] = useState(true)
   const [loading, setLoading] = useState(true)
   const [accountsLoading, setAccountsLoading] = useState(false)
   const [accountsError, setAccountsError] = useState<string | null>(null)
@@ -38,9 +48,131 @@ function App() {
   const [billingCycles, setBillingCycles] = useState<BillingCycle[]>([])
   const [billingCyclesLoading, setBillingCyclesLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [manualPositions, setManualPositions] = useState<ManualPosition[]>(getManualPositions)
+  const [manualPositions, setManualPositions] = useState<ManualPosition[]>([])
+  const [manualPositionsLoading, setManualPositionsLoading] = useState(true)
   const [showAddModal, setShowAddModal] = useState(false)
   const [editingManual, setEditingManual] = useState<ManualPosition | null>(null)
+
+  // Load manual positions from API
+  useEffect(() => {
+    async function loadPositions() {
+      try {
+        const positions = await api.getPositions()
+        setManualPositions(positions.map(p => ({
+          id: p.id,
+          investment_type: p.investment_type,
+          subtype: p.subtype,
+          amount: p.amount,
+          due_date: p.due_date,
+        })))
+      } catch (err) {
+        if (err instanceof api.UnauthorizedError) {
+          logout()
+          return
+        }
+        console.warn('Failed to load positions from API', err)
+      } finally {
+        setManualPositionsLoading(false)
+      }
+    }
+    loadPositions()
+  }, [logout])
+
+  // Load pluggy items from API
+  useEffect(() => {
+    async function loadItems() {
+      try {
+        const apiItems = await api.getPluggyItems()
+        setItems(apiItems.map(i => ({ id: i.pluggy_item_id, name: i.connector_name })))
+      } catch (err) {
+        if (err instanceof api.UnauthorizedError) {
+          logout()
+          return
+        }
+        console.warn('Failed to load pluggy items from API', err)
+      } finally {
+        setItemsLoading(false)
+      }
+    }
+    loadItems()
+  }, [logout])
+
+  // Local storage/cookie-to-DB migration: migrate old data on first load
+  useEffect(() => {
+    if (manualPositionsLoading || itemsLoading) return
+
+    async function migrateLocalData() {
+      // Migrate manual positions from cookies
+      const cookiePositions = getManualPositions()
+      if (cookiePositions.length > 0) {
+        try {
+          const created = await Promise.all(
+            cookiePositions.map(p =>
+              api.createPosition({
+                investment_type: p.investment_type,
+                subtype: p.subtype,
+                amount: p.amount,
+                due_date: p.due_date,
+              })
+            )
+          )
+          setManualPositions(prev => [
+            ...prev,
+            ...created.map(p => ({
+              id: p.id,
+              investment_type: p.investment_type,
+              subtype: p.subtype,
+              amount: p.amount,
+              due_date: p.due_date,
+            })),
+          ])
+          clearCookie(MANUAL_POSITIONS_COOKIE)
+        } catch (err) {
+          console.warn('Failed to migrate manual positions', err)
+        }
+      }
+
+      // Migrate salary config from cookies
+      const cookieConfig = getSalaryConfig()
+      if (cookieConfig) {
+        try {
+          await api.saveCompensationConfig({
+            grossSalary: cookieConfig.grossSalary,
+            deductions: cookieConfig.deductions ?? [],
+            thirteenthReceived: cookieConfig.thirteenthReceived ?? 0,
+            vacationThirdReceived: cookieConfig.vacationThirdReceived ?? 0,
+            bonusYear: cookieConfig.bonusYear ?? null,
+            compoundSavings: cookieConfig.compoundSavings ?? false,
+          })
+          clearCookie(SALARY_CONFIG_COOKIE)
+        } catch (err) {
+          console.warn('Failed to migrate salary config', err)
+        }
+      }
+
+      // Migrate pluggy items from localStorage
+      const lsItems = getStoredItems()
+      if (lsItems.length > 0) {
+        try {
+          await Promise.all(
+            lsItems.map(item =>
+              api.createPluggyItem({ pluggy_item_id: item.id, connector_name: item.name })
+            )
+          )
+          setItems(prev => {
+            const existingIds = new Set(prev.map(i => i.id))
+            const newItems = lsItems.filter(i => !existingIds.has(i.id))
+            return [...prev, ...newItems]
+          })
+          localStorage.removeItem(STORAGE_KEY)
+        } catch (err) {
+          console.warn('Failed to migrate pluggy items', err)
+        }
+      }
+    }
+
+    migrateLocalData()
+  }, [manualPositionsLoading, itemsLoading])
 
   // Fetch health status
   useEffect(() => {
@@ -264,13 +396,12 @@ function App() {
 
     // Fetch the connector name
     const name = await fetchItemName(newId)
-    const newItem: ConnectedItem = { id: newId, name }
-
-    setItems((prev) => {
-      const updated = [...prev, newItem]
-      storeItems(updated)
-      return updated
-    })
+    try {
+      await api.createPluggyItem({ pluggy_item_id: newId, connector_name: name })
+      setItems((prev) => [...prev, { id: newId, name }])
+    } catch (err) {
+      console.error('Failed to save connected item', err)
+    }
   }
 
   const handleClose = () => {
@@ -282,7 +413,10 @@ function App() {
     try {
       await Promise.all(
         items.map((item) =>
-          fetch(`/api/items/${encodeURIComponent(item.id)}`, { method: 'DELETE' })
+          Promise.all([
+            fetch(`/api/items/${encodeURIComponent(item.id)}`, { method: 'DELETE' }),
+            api.deletePluggyItem(item.id),
+          ])
         )
       )
     } catch (err) {
@@ -299,28 +433,41 @@ function App() {
     setCreditCards([])
     setCreditCardsError(null)
     setBillingCycles([])
-    storeItems([])
   }
 
-  const handleSaveManual = (data: { investment_type: string; subtype: string; amount: number; due_date: string | null }) => {
-    const newPos: ManualPosition = { id: 'manual_' + Date.now(), ...data }
-    const updated = [...getManualPositions(), newPos]
-    saveManualPositions(updated)
-    setManualPositions(updated)
-    setShowAddModal(false)
+  const handleSaveManual = async (data: { investment_type: string; subtype: string; amount: number; due_date: string | null }) => {
+    try {
+      const created = await api.createPosition(data)
+      setManualPositions(prev => [...prev, {
+        id: created.id,
+        investment_type: created.investment_type,
+        subtype: created.subtype,
+        amount: created.amount,
+        due_date: created.due_date,
+      }])
+      setShowAddModal(false)
+    } catch (err) {
+      console.error('Failed to save position', err)
+    }
   }
 
-  const handleUpdateManual = (id: string, amount: number) => {
-    const updated = getManualPositions().map(p => p.id === id ? { ...p, amount } : p)
-    saveManualPositions(updated)
-    setManualPositions(updated)
-    setEditingManual(null)
+  const handleUpdateManual = async (id: string, amount: number) => {
+    try {
+      await api.updatePosition(id, { amount })
+      setManualPositions(prev => prev.map(p => p.id === id ? { ...p, amount } : p))
+      setEditingManual(null)
+    } catch (err) {
+      console.error('Failed to update position', err)
+    }
   }
 
-  const handleRemoveManual = (id: string) => {
-    const updated = getManualPositions().filter(p => p.id !== id)
-    saveManualPositions(updated)
-    setManualPositions(updated)
+  const handleRemoveManual = async (id: string) => {
+    try {
+      await api.deletePosition(id)
+      setManualPositions(prev => prev.filter(p => p.id !== id))
+    } catch (err) {
+      console.error('Failed to delete position', err)
+    }
   }
 
   const manualAsPositions: InvestmentPosition[] = manualPositions.map(p => ({
@@ -427,6 +574,29 @@ function App() {
       </TooltipProvider>
     </SidebarProvider>
   )
+}
+
+function App() {
+  const { user, loading } = useAuth()
+
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <div className="text-muted-foreground">Loading...</div>
+      </div>
+    )
+  }
+
+  if (!user) {
+    return (
+      <Routes>
+        <Route path="/register" element={<RegisterPage />} />
+        <Route path="*" element={<LoginPage />} />
+      </Routes>
+    )
+  }
+
+  return <AuthenticatedApp />
 }
 
 export default App

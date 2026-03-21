@@ -3,14 +3,26 @@ import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { server } from './test/msw-server'
-import { ITEM_ID, sampleCreditCards, sampleTransactions } from './test/msw-handlers'
-import { STORAGE_KEY } from './lib/storage'
+import { ITEM_ID, sampleTransactions } from './test/msw-handlers'
 import { renderWithRouter } from './test/render'
 import App from './App'
 
 vi.mock('react-pluggy-connect', () => ({
   PluggyConnect: () => null,
 }))
+
+function seedPluggyItems() {
+  server.use(
+    http.get('/api/pluggy-items', () =>
+      HttpResponse.json([{
+        id: 'internal-id',
+        user_id: 'test-user-id',
+        pluggy_item_id: ITEM_ID,
+        connector_name: 'Nubank',
+      }])
+    )
+  )
+}
 
 describe('App integration', () => {
   it('renders the dashboard page by default', async () => {
@@ -53,7 +65,7 @@ describe('App integration', () => {
   })
 
   it('renders transaction cycle tabs when items are connected', async () => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify([{ id: ITEM_ID, name: 'Nubank' }]))
+    seedPluggyItems()
     const user = userEvent.setup()
     renderWithRouter(<App />)
 
@@ -63,12 +75,10 @@ describe('App integration', () => {
     await waitFor(() => {
       expect(screen.getAllByText(sampleTransactions.results[0].description).length).toBeGreaterThan(0)
     })
-
-    localStorage.removeItem(STORAGE_KEY)
   })
 
   it('renders transactions from MSW mock data on credit cards page', async () => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify([{ id: ITEM_ID, name: 'Nubank' }]))
+    seedPluggyItems()
     const user = userEvent.setup()
     renderWithRouter(<App />)
 
@@ -79,8 +89,6 @@ describe('App integration', () => {
       expect(screen.getAllByText(sampleTransactions.results[0].description).length).toBeGreaterThan(0)
       expect(screen.getAllByText(sampleTransactions.results[1].description).length).toBeGreaterThan(0)
     })
-
-    localStorage.removeItem(STORAGE_KEY)
   })
 
   it('surfaces a health API error as an alert on the dashboard', async () => {

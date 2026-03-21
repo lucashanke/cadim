@@ -84,7 +84,7 @@ describe('AddManualPosition integration', () => {
     })
   })
 
-  it('position persists in cookie after saving', async () => {
+  it('position persists via API after saving', async () => {
     const user = await openAddModal()
 
     const amountInput = screen.getByPlaceholderText('0.00')
@@ -96,11 +96,12 @@ describe('AddManualPosition integration', () => {
       expect(screen.queryByText('Manually add an investment position')).toBeNull()
     })
 
-    // Check cookie
-    expect(document.cookie).toContain('manual_investment_positions')
-    const match = document.cookie.match(/manual_investment_positions=([^;]*)/)
-    const positions = JSON.parse(decodeURIComponent(match![1]))
-    expect(positions).toHaveLength(1)
-    expect(positions[0].amount).toBe(2000)
+    // Position should now appear in the investments table (loaded from API mock)
+    await waitFor(() => screen.getByRole('link', { name: /^investments$/i }))
+    await user.click(screen.getByRole('link', { name: /^investments$/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText('Manual')).toBeInTheDocument()
+    })
   })
 })

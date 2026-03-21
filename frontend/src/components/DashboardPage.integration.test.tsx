@@ -12,7 +12,16 @@ vi.mock('react-pluggy-connect', () => ({
 }))
 
 function seedItem() {
-  localStorage.setItem('pluggy_items', JSON.stringify([{ id: ITEM_ID, name: 'Nubank' }]))
+  server.use(
+    http.get('/api/pluggy-items', () =>
+      HttpResponse.json([{
+        id: 'internal-id',
+        user_id: 'test-user-id',
+        pluggy_item_id: ITEM_ID,
+        connector_name: 'Nubank',
+      }])
+    )
+  )
 }
 
 describe('DashboardPage integration', () => {
